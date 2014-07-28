@@ -12,6 +12,7 @@ import Control.Monad.Logger (NoLoggingT)
 
 import Model.User
 import Model.Topic
+import Model.TopicMember
 import Model.ID
 import Model.StorableJson
 import Api
@@ -36,3 +37,4 @@ runChatlessMigrate :: (ConnectionManager cm conn, MonadBaseControl IO m, MonadIO
 runChatlessMigrate = runDbConn $ runMigration defaultMigrationLogger $ do
     migrate (undefined :: User)
     migrate (undefined :: Topic)
+    migrate (undefined :: Member)

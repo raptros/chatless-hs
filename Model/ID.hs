@@ -8,9 +8,13 @@ import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.Generic (primToPersistValue, primFromPersistValue)
 
-newtype ServerId = ServerId Text deriving (Eq, Show)
+newtype ServerId = ServerId Text deriving (Eq, Show, Read)
 
 $(deriveJSON defaultOptions ''ServerId)
+
+instance PathPiece ServerId where
+    toPathPiece (ServerId i) = i
+    fromPathPiece = Just . ServerId
 
 newtype UserId = UserId Text deriving (Eq, Show, Read)
 

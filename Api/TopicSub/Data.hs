@@ -18,15 +18,20 @@ import Network.HTTP.Types
 import Data.Pool
 import Data.Text.Encoding (decodeUtf8)
 
-data TopicSub = MeTopicSub ServerId TopicId |
-                MeAboutTopicSub ServerId |
-                MeInvitesTopicSub ServerId |
-                LocalUserTopicSub ServerId UserId TopicId |
-                LocalUserAboutTopicSub ServerId UserId |
-                LocalUserInvitesTopicSub ServerId UserId |
+data TopicSub = MeTopicSub TopicId |
+                MeAboutTopicSub |
+                MeInvitesTopicSub |
+                LocalUserTopicSub UserId TopicId |
+                LocalUserAboutTopicSub UserId |
+                LocalUserInvitesTopicSub UserId |
+                AnyUserAboutTopicSub ServerId UserId |
+                AnyUserInvitesTopicSub ServerId UserId |
                 AnyUserTopicSub ServerId UserId TopicId
 
 
 mkYesodSubData "TopicSub" [parseRoutes|
 / TopicR GET
+/member MembersR GET
+/member/user/#UserId LocalMemberR GET PUT POST
+/member/server/#ServerId/user/#UserId MemberR GET PUT POST
 |]

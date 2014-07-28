@@ -11,9 +11,12 @@ import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.TH
 
+import Model.User
 import Model.Utils
 import Model.ID
 import Model.StorableJson
+
+import Control.Applicative
 
 data TopicMode = TopicMode {
     readable :: Bool,
@@ -75,3 +78,14 @@ mkPersist defaultCodegenConfig [groundhog|
         - name: topicMode
           dbName: mode
 |]
+
+type TopicRef = Key Topic (Unique TopicCoord)
+
+instance ToJSON (Key Topic (Unique TopicCoord)) where
+    toJSON (TopicCoordKey sid uid tid) = object ["server" .= sid, "user" .= uid, "topic" .= tid]
+
+instance FromJSON (Key Topic (Unique TopicCoord)) where
+    parseJSON = withObject "TopicCoordKey" $ \v -> TopicCoordKey <$> v .: "server" <*> v .: "user" <*> v .: "topic"
+
+fromUserRef :: TopicId -> UserRef -> TopicRef
+fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid

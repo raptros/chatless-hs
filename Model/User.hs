@@ -6,6 +6,7 @@ import Data.Aeson
 import Data.Aeson.TH
 import Model.ID
 import Model.Utils
+import Control.Applicative
 
 data User = User {
     userServer :: ServerId,
@@ -38,3 +39,11 @@ mkPersist defaultCodegenConfig [groundhog|
         - name: userInvite
           dbName: invite
 |]
+
+type UserRef = (Key User (Unique UserCoord))
+
+instance ToJSON (Key User (Unique UserCoord)) where
+    toJSON (UserCoordKey sid uid) = object ["server" .= sid, "user" .= uid]
+
+instance FromJSON (Key User (Unique UserCoord)) where
+    parseJSON = withObject "UserCoordKey" $ \v -> UserCoordKey <$> v .: "server" <*> v .: "user"
