@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 module Api.Utils where
 
 import Yesod.Core
@@ -9,6 +9,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Model.ID
 import Model.User
 import Model.Topic
+import Control.Monad.Except
 
 reasonObject :: Text -> [(Text, Value)] -> Value
 reasonObject r d = object $ ("reason" .= r) : d

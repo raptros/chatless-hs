@@ -5,6 +5,7 @@ import Api.Utils
 import Api.TopicSub.Data
 import Api.Root
 import Api.RootUtils
+import Operations
 import Yesod.Core
 import Safe
 
@@ -64,12 +65,14 @@ pickTopicFromUser c u = TopicCoordKey (userServer u) (userId u) (c u)
 getMembersR :: TopicHandler Value
 getMembersR = do
     tr <- readTopicRef
+    --todo: permissions
     members <- lift $ runDb (project (MemberUserField, MemberModeField) $ MemberTopicField ==. tr)
     returnJson $ (uncurry subsetAsJson) <$> members
 
 getMemberR :: ServerId -> UserId -> TopicHandler Value
 getMemberR sid uid = do
     tr <- readTopicRef
+    --todo: permissions
     let ur = UserCoordKey sid uid
         tm = TargetMemberKey tr ur
     mMember <- lift $ runDb $ getBy tm
@@ -81,31 +84,22 @@ putMemberR sid uid = do
     let targetUser = UserCoordKey sid uid
     newMode <- requireJsonBody :: TopicHandler MemberMode
     tr <- readTopicRef
-    caller <- extractUserId
-    server <- lift $ reader localServer
-    res <- lift $ runDb $ runExceptT $ setMemberModeOp targetUser newMode tr caller server
-    returnJson $ Member tr targetUser newMode
+    callerRef <- lift $ getCaller
+    res <- lift $ runDb $ runExceptT $ setMemberModeOp targetUser newMode tr callerRef
+    --returnJson $ Member tr targetUser newMode
+    either (uncurry sendResponseStatus) (const $ returnJson $ Member tr targetUser newMode) res
 
-setMemberModeOp :: (PersistBackend m, Functor m, Monad m) => UserRef -> MemberMode -> TopicRef -> UserId -> ServerId -> ExceptT (Status, Value) m ()
-setMemberModeOp targetUser newMode tr caller server = do
-        --topicNotFound ends up doing throwIO. what happens to runDb?
-        --i think the answer is since the transaction doesn't get committed it's fine
-        mTopic <- getBy tr 
-        topic <- maybe (throwError (notFound404, reasonObject "not_found" ["topic" .= tr])) return mTopic
-        em <- getMemberEffectiveMode server caller topic
+setMemberModeOp :: (PersistBackend m, Functor m, Monad m) => UserRef -> MemberMode -> TopicRef -> UserRef -> ExceptT (Status, Value) m ()
+setMemberModeOp targetUser newMode tr callerRef = do
+        topic <- (lift $ getBy tr) >>= maybe (throwError (notFound404, reasonObject "not_found" ["topic" .= tr])) return
+        em <- lift $ getMemberEffectiveMode callerRef topic
         --todo all reason strings need to be pulled out so somewhere (for consistent spelling)
         unless (mmSetMember em) $ throwError (forbidden403, reasonObject "impermissible" ["operation" .= ("set_member_mode" :: T.Text) ])
-        mTargetMember <- getBy $ TargetMemberKey tr targetUser
+        mTargetMember <- lift $ getBy $ TargetMemberKey tr targetUser
         when (isNothing mTargetMember) $ throwError (notFound404, reasonObject "not_found" ["topic" .= tr, "member" .= targetUser])
-        update [MemberModeField =. newMode] $ (MemberTopicField ==. tr) &&. (MemberUserField ==. targetUser)
+        lift $ update [MemberModeField =. newMode] $ (MemberTopicField ==. tr) &&. (MemberUserField ==. targetUser)
         --todo send a message
         return ()
-
-getMemberEffectiveMode :: (PersistBackend m, Functor m) => ServerId -> UserId -> Topic -> m MemberMode
-getMemberEffectiveMode sid uid topic
-    | (sid == topicServer topic) && (uid == topicUser topic) = return modeCreator
-    | otherwise = maybe (nonMemberMode $ topicMode topic) memberMode <$> query
-        where query = getBy $ TargetMemberKey (extractUnique topic) (UserCoordKey sid uid) 
 
 -- action: invite a new member to the topic
 postMemberR :: ServerId -> UserId -> TopicHandler Value

@@ -24,9 +24,10 @@ library
     groundhog,
     groundhog-th,
     groundhog-sqlite,
+    safe,
+    yesod-core,
     aeson,
-    snap-core,
-    snap-server, --note: install this with -fopenssl
+    MonadRandom,
     lens
     
   -- hs-source-dirs:      

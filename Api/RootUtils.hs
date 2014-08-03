@@ -41,3 +41,5 @@ loadMe = do
     mUser <- runDb $ getBy meRef
     maybe (meNotPresent meRef) return mUser
 
+refLocalUser :: UserId -> Chatless -> UserRef
+refLocalUser = flip $ UserCoordKey . localServer

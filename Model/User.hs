@@ -42,6 +42,12 @@ mkPersist defaultCodegenConfig [groundhog|
 
 type UserRef = (Key User (Unique UserCoord))
 
+userRefServer :: UserRef -> ServerId
+userRefServer (UserCoordKey s _) = s
+
+userRefUser :: UserRef -> UserId
+userRefUser (UserCoordKey _ u) = u
+
 instance ToJSON (Key User (Unique UserCoord)) where
     toJSON (UserCoordKey sid uid) = object ["server" .= sid, "user" .= uid]
 

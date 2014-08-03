@@ -89,3 +89,6 @@ instance FromJSON (Key Topic (Unique TopicCoord)) where
 
 fromUserRef :: TopicId -> UserRef -> TopicRef
 fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid
+
+isCreator :: UserRef -> Topic -> Bool
+isCreator (UserCoordKey sid uid) t = (sid == topicServer t) && (uid == topicUser t)
