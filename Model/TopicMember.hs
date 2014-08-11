@@ -27,7 +27,7 @@ data MemberMode = MemberMode {
     mmSetBanner :: Bool,
     mmSetInfo :: Bool,
     mmSetMode :: Bool
-}
+} deriving (Eq, Show)
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 2 } ''MemberMode)
 
@@ -113,3 +113,5 @@ mkPersist defaultCodegenConfig [groundhog|
         - name: memberMode
           dbName: mode
 |]
+
+instance NeverNull MemberMode

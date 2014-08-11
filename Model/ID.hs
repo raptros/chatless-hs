@@ -34,6 +34,10 @@ instance PathPiece TopicId where
 
 newtype MessageId = MessageId Text deriving (Eq, Show)
 
+instance PathPiece MessageId where
+    toPathPiece (MessageId i) = i
+    fromPathPiece = Just . MessageId
+
 $(deriveJSON defaultOptions ''MessageId)
 
 instance PersistField ServerId where
@@ -65,3 +69,13 @@ instance PersistField TopicId where
 instance PrimitivePersistField TopicId where
     toPrimitivePersistValue p (TopicId id) = toPrimitivePersistValue p id
     fromPrimitivePersistValue p x = TopicId $ fromPrimitivePersistValue p x
+
+instance PersistField MessageId where
+    persistName _ = "MessageId"
+    toPersistValues = primToPersistValue
+    fromPersistValues = primFromPersistValue
+    dbType _ = DbTypePrimitive DbString False Nothing Nothing
+
+instance PrimitivePersistField MessageId where
+    toPrimitivePersistValue p (MessageId id) = toPrimitivePersistValue p id
+    fromPrimitivePersistValue p x = MessageId $ fromPrimitivePersistValue p x

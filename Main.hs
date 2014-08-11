@@ -13,6 +13,7 @@ import Control.Monad.Logger (NoLoggingT)
 import Model.User
 import Model.Topic
 import Model.TopicMember
+import Model.Message
 import Model.ID
 import Model.StorableJson
 import Api
@@ -20,15 +21,20 @@ import Api.Root
 
 main :: IO ()
 main = do
-    pool <- createSqlitePool ":memory:" 1
-    runChatlessMigrate pool
-    (flip runDbConn) pool $ do
-        insert $ makeFakeUser "user0"
-        insert $ makeFakeUser "user1"
+    pool <- setup
     warp 3000 $ Chatless {
         backendConn = pool,
         localServer = ServerId "local"
     }
+
+setup = do
+    pool <- createSqlitePool "fakery.db" 1
+    runChatlessMigrate pool
+    (flip runDbConn) pool $ do
+        insert $ makeFakeUser "user0"
+        insert $ makeFakeUser "user1"
+    return pool
+
 
 makeFakeUser :: T.Text -> User
 makeFakeUser id = User (ServerId "local") (UserId id) (TopicId "about") (TopicId "invites")
@@ -38,3 +44,4 @@ runChatlessMigrate = runDbConn $ runMigration defaultMigrationLogger $ do
     migrate (undefined :: User)
     migrate (undefined :: Topic)
     migrate (undefined :: Member)
+    migrate (undefined :: DbMessage)

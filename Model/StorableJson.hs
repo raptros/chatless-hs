@@ -36,6 +36,8 @@ instance PrimitivePersistField StorableJson where
     toPrimitivePersistValue p (StorableJson bs) = toPrimitivePersistValue p bs
     fromPrimitivePersistValue p x = StorableJson $ fromPrimitivePersistValue p x
 
+instance NeverNull StorableJson
+
 storableObject :: Object -> StorableJson
 storableObject = StorableJson . LB.toStrict . encode . Object
 

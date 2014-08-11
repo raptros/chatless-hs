@@ -79,6 +79,8 @@ mkPersist defaultCodegenConfig [groundhog|
           dbName: mode
 |]
 
+instance NeverNull TopicMode
+
 type TopicRef = Key Topic (Unique TopicCoord)
 
 instance ToJSON (Key Topic (Unique TopicCoord)) where
