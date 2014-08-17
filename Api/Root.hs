@@ -64,15 +64,23 @@ mkYesodData "Chatless" [parseRoutes|
 -- /server/#ServerId/user/#UserId AnyUserR GET
 -- /server/#ServerId/user/#UserId/topic AnyUserTopicsR GET
 -- /server/#ServerId/user/#UserId/ AnyUserR GET
+-- /server/#ServerId/user/#UserId/about AnyUserAboutTopicSubR TopicSub getAnyUserAboutTopicSub
+-- /server/#ServerId/user/#UserId/invites AnyUserInvitesTopicSubR TopicSub getAnyUserInvitesTopicSub
+-- /server/#ServerId/user/#UserId/topic/#TopicId AnyUserTopicSubR TopicSub getAnyUserTopicSub
 |]
 
 giveServer :: (ServerId -> b) -> Chatless -> b
 giveServer = (. localServer)
 
-getMeAboutTopicSub = giveServer MeAboutTopicSub
-getMeInvitesTopicSub = giveServer MeInvitesTopicSub
-getMeTopicSub = giveServer MeTopicSub
+getMeAboutTopicSub = const MeAboutTopicSub
+getMeInvitesTopicSub = const MeInvitesTopicSub
+getMeTopicSub = const MeTopicSub
 
-getLocalUserAboutTopicSub = giveServer LocalUserAboutTopicSub 
-getLocalUserInvitesTopicSub = giveServer LocalUserInvitesTopicSub 
-getLocalUserTopicSub = giveServer LocalUserTopicSub
+getLocalUserAboutTopicSub = const LocalUserAboutTopicSub 
+getLocalUserInvitesTopicSub = const LocalUserInvitesTopicSub 
+getLocalUserTopicSub = const LocalUserTopicSub
+
+getAnyUserAboutTopicSub = const AnyUserAboutTopicSub
+getAnyUserInvitesTopicSub = const AnyUserInvitesTopicSub
+getAnyUserTopicSub = const AnyUserTopicSub
+

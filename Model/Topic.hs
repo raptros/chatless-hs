@@ -6,14 +6,19 @@ import qualified Data.Char as C
 
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Aeson.Types (Pair, Parser, typeMismatch)
 
 import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.TH
+import qualified Data.HashMap.Strict as H
 
+import Model.User
 import Model.Utils
 import Model.ID
 import Model.StorableJson
+
+import Control.Applicative
 
 data TopicMode = TopicMode {
     readable :: Bool,
@@ -75,3 +80,25 @@ mkPersist defaultCodegenConfig [groundhog|
         - name: topicMode
           dbName: mode
 |]
+
+instance NeverNull TopicMode
+
+type TopicRef = Key Topic (Unique TopicCoord)
+
+topicRefObject :: TopicRef -> Object
+topicRefObject (TopicCoordKey sid uid tid) = H.fromList ["server" .= sid, "user" .= uid, "topic" .= tid]
+
+instance ToJSON (Key Topic (Unique TopicCoord)) where
+    toJSON = Object . topicRefObject
+
+topicRefFromObject :: Object -> Parser TopicRef
+topicRefFromObject v = TopicCoordKey <$> v .: "server" <*> v .: "user" <*> v .: "topic"
+
+instance FromJSON (Key Topic (Unique TopicCoord)) where
+    parseJSON = withObject "TopicCoordKey" topicRefFromObject
+
+fromUserRef :: TopicId -> UserRef -> TopicRef
+fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid
+
+isCreator :: UserRef -> Topic -> Bool
+isCreator (UserCoordKey sid uid) t = (sid == topicServer t) && (uid == topicUser t)
