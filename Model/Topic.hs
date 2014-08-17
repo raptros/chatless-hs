@@ -6,10 +6,12 @@ import qualified Data.Char as C
 
 import Data.Aeson
 import Data.Aeson.TH
+import Data.Aeson.Types (Pair, Parser, typeMismatch)
 
 import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.TH
+import qualified Data.HashMap.Strict as H
 
 import Model.User
 import Model.Utils
@@ -83,11 +85,17 @@ instance NeverNull TopicMode
 
 type TopicRef = Key Topic (Unique TopicCoord)
 
+topicRefObject :: TopicRef -> Object
+topicRefObject (TopicCoordKey sid uid tid) = H.fromList ["server" .= sid, "user" .= uid, "topic" .= tid]
+
 instance ToJSON (Key Topic (Unique TopicCoord)) where
-    toJSON (TopicCoordKey sid uid tid) = object ["server" .= sid, "user" .= uid, "topic" .= tid]
+    toJSON = Object . topicRefObject
+
+topicRefFromObject :: Object -> Parser TopicRef
+topicRefFromObject v = TopicCoordKey <$> v .: "server" <*> v .: "user" <*> v .: "topic"
 
 instance FromJSON (Key Topic (Unique TopicCoord)) where
-    parseJSON = withObject "TopicCoordKey" $ \v -> TopicCoordKey <$> v .: "server" <*> v .: "user" <*> v .: "topic"
+    parseJSON = withObject "TopicCoordKey" topicRefFromObject
 
 fromUserRef :: TopicId -> UserRef -> TopicRef
 fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid

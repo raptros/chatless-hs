@@ -7,6 +7,7 @@ import Data.Aeson.TH
 import Model.ID
 import Model.Utils
 import Control.Applicative
+import qualified Data.HashMap.Strict as H
 
 data User = User {
     userServer :: ServerId,
@@ -48,8 +49,11 @@ userRefServer (UserCoordKey s _) = s
 userRefUser :: UserRef -> UserId
 userRefUser (UserCoordKey _ u) = u
 
+userRefObject :: UserRef -> Object
+userRefObject (UserCoordKey sid uid) = H.fromList ["server" .= sid, "user" .= uid]
+
 instance ToJSON (Key User (Unique UserCoord)) where
-    toJSON (UserCoordKey sid uid) = object ["server" .= sid, "user" .= uid]
+    toJSON = Object . userRefObject
 
 instance FromJSON (Key User (Unique UserCoord)) where
     parseJSON = withObject "UserCoordKey" $ \v -> UserCoordKey <$> v .: "server" <*> v .: "user"
