@@ -8,6 +8,8 @@ import Model.User
 import Model.Topic
 import Model.TopicMember
 import Model.StorableJson
+import Model.Message
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Catch
 import Database.Groundhog
@@ -15,78 +17,79 @@ import Database.Groundhog.Generic
 import Control.Applicative
 import Control.Monad.Random
 import Data.Maybe
---import Database.Groundhog.Generic (runDb)
---import Database.Groundhog.Core (ConnectionManager(..))
---
---todo wrap a bunch of these up in transactions.
+import Model.IDGen
 
-getMemberEffectiveMode :: (PersistBackend m, Functor m) => UserRef -> Topic -> m MemberMode
+getMemberEffectiveMode :: PersistBackend m => UserRef -> Topic -> m MemberMode
 getMemberEffectiveMode ur topic
     | ur `isCreator` topic = return modeCreator
-    | otherwise = maybe (nonMemberMode $ topicMode topic) memberMode <$> query
+    | otherwise = liftM extract query --todo replace with fmap once monads are all functors
         where query = getBy $ TargetMemberKey (extractUnique topic) ur
+              extract = maybe (nonMemberMode (topicMode topic)) memberMode
 
+listMembers :: (CatchDbConn m cm conn, Functor m) => UserRef -> TopicRef -> m (Either OpError [MemberPartial])
+listMembers callerRef tr = runOp $ do
+    testTopicPerm callerRef tr mmRead ReadTopic
+    res <- project (MemberUserField, MemberModeField) $ MemberTopicField ==. tr
+    return $ uncurry MemberPartial <$> res
 
-setMemberModeOp' :: (PersistBackend m, Functor m) => UserRef -> MemberMode -> TopicRef -> UserRef -> ExceptT ApiError m ()
-setMemberModeOp' targetUser newMode tr callerRef = do
-    topic <- (lift $ getBy tr) >>= (getOrThrow $ TopicNotFound tr)
-    em <- lift $ getMemberEffectiveMode callerRef topic
-    unless (mmSetMember em) $ throwError $ OperationDenied SetMemberMode
-    targetMember <- (lift $ getBy $ TargetMemberKey tr targetUser) >>= (getOrThrow $ MemberNotFound tr targetUser)
-    lift $ update [MemberModeField =. newMode] $ (MemberTopicField ==. tr) &&. (MemberUserField ==. targetUser)
-    return ()
+getMember :: (CatchDbConn m cm conn) => UserRef -> TopicRef -> UserRef -> m (Either OpError MemberMode)
+getMember callerRef tr ur = runOp $ do
+    testTopicPerm callerRef tr mmRead ReadTopic
+    res <- getBy (TargetMemberKey tr ur) 
+    getOrThrow (MemberNotFound tr ur) (memberMode <$> res)
 
-setMemberModeOp'' :: (CatchDbConn m cm conn, Functor m) => UserRef -> MemberMode -> TopicRef -> UserRef -> m (Either ApiError ())
-setMemberModeOp'' targetUser newMode tr callerRef = runOp $ do
-    topic <- getBy tr >>= (getOrThrow' $ TopicNotFound tr)
-    em <- getMemberEffectiveMode callerRef topic
-    unless (mmSetMember em) $ throwM $ OperationDenied SetMemberMode
-    targetMember <- (getBy $ TargetMemberKey tr targetUser) >>= (getOrThrow' $ MemberNotFound tr targetUser)
+opGetTopic :: (PersistBackend m, MonadThrow m) => TopicRef -> m Topic
+opGetTopic tr = getBy tr >>= getOrThrow (TopicNotFound tr)
+
+--todo figure out best order of arguments
+setMemberMode :: (CatchDbConn m cm conn, Functor m) => UserRef -> TopicRef -> UserRef -> MemberModeUpdate -> m (Either OpError Message)
+setMemberMode callerRef tr targetUser modeUpdate = runOp $ do
+    testTopicPerm callerRef tr mmSetMember SetMemberMode
+    targetMember <- getBy (TargetMemberKey tr targetUser) >>= getOrThrow (MemberNotFound tr targetUser)
+    let newMode = resolveMemberModeUpdate (memberMode targetMember) modeUpdate
     update [MemberModeField =. newMode] $ (MemberTopicField ==. tr) &&. (MemberUserField ==. targetUser)
-    return ()
+    newMsgId <- genRandom  --declare victory and retreat
+    let newMsg = Message tr newMsgId callerRef $ MsgMemberModeChanged targetUser newMode
+    return newMsg
 
---listTopics :: (HasConn m cm conn, PersistBackend (DbPersist conn m)) => ServerId -> UserId -> m [TopicRef]
---listTopics tid uid = runDb $ project TopicCoord $ (TopicServerField ==. tid) &&. (TopicUserField ==. uid)
+testTopicPerm :: (MonadThrow m, PersistBackend m) => UserRef -> TopicRef -> (MemberMode -> Bool) -> OpType -> m ()
+testTopicPerm caller tr mode op = do
+    topic <- opGetTopic tr
+    em <- getMemberEffectiveMode caller topic
+    unless (mode em) $ throwM (OperationDenied op)
 
 listTopicsOp :: PersistBackend m => UserRef -> m [TopicRef]
 listTopicsOp ref = project TopicCoord $ (TopicServerField ==. userRefServer ref) &&. (TopicUserField ==. userRefUser ref)
 
-{-
-createTopicOp :: (Functor m, PersistBackend m) => UserRef -> TopicCreate -> ExceptT ApiError m Topic
-createTopicOp ur tc = do
-    --todo random topic ids
-    tid <- getOrThrow (GenerateIdFailed ur []) (createId tc)
-    let newTopic = initializeTopic ur tid tc
-        firstMember = Member (tid `fromUserRef` ur) ur modeCreator
-    --create a topic and insert the creator
-    tcRes <- withExceptT (const $ IdInUse $ fromUserRef tid ur) (ExceptT $ insertByAll newTopic)
-    --if topic insertion did not fail constraints, neither should first member insertion
-    lift $ insert firstMember
-    return newTopic
-    --eitherConst (sendResponseStatus status400 $ reasonObject "id_in_use" []) (returnJson newTopic) r
-    -}
-
-createTopicOp :: CatchDbConn m cm conn => UserRef -> TopicCreate -> m (Either ApiError Topic)
-createTopicOp ur tc = runOp $ do
-    tid <- getOrThrow' (GenerateIdFailed ur []) (createId tc)
+createTopic :: (CatchDbConn m cm conn) => UserRef -> TopicCreate -> m (Either OpError Topic)
+createTopic ur tc = runOp $ do 
+    tid <- maybe genRandom return $ createId tc
     let tr = fromUserRef tid ur
         newTopic = initializeTopic ur tid tc
         firstMember = Member tr ur modeCreator
     --create a topic and insert the creator
     tcRes <- insertByAll newTopic
-    throwEitherConst (IdInUse tr) tcRes
+    throwEitherConst (checkedFailure givenId ur tr) tcRes
     insert firstMember
     return newTopic
+    where givenId = isJust . createId $ tc
 
+checkedFailure :: Bool -> UserRef -> TopicRef -> OpError
+checkedFailure True _ = IdInUse
+checkedFailure False ur = GenerateIdFailed ur . (:[]) . topicRefId
 
+joinTopic :: CatchDbConn m cm conn => UserRef -> TopicRef -> m (Either OpError MemberMode)
+joinTopic = (runOp .) . joinTopicOp
 
-initializeTopic :: UserRef -> TopicId -> TopicCreate -> Topic
-initializeTopic caller tid (TopicCreate _ mBanner mInfo mMode) = Topic {
-    topicServer = userRefServer caller,
-    topicUser = userRefUser caller,
-    topicId = tid,
-    topicBanner = fromMaybe "" mBanner,
-    topicInfo = fromMaybe storableEmpty mInfo,
-    topicMode = fromMaybe defaultTopicMode mMode
-}
+joinTopicOp :: (MonadThrow m, PersistBackend m) => UserRef -> TopicRef -> m MemberMode
+joinTopicOp cr tr = do
+    topic <- opGetTopic tr
+    member <- getBy (TargetMemberKey tr cr) >>= maybe (insertMember topic) return
+    return $ memberMode member
+    where memberForTopic = Member tr cr . joinerMode . topicMode
+          insertMember = monadKestrel insert . memberForTopic
+
+monadKestrel :: (Monad m) => (a -> m b) -> a -> m a
+monadKestrel f a = f a >> return a 
+
 

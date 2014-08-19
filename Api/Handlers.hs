@@ -32,42 +32,12 @@ getMeTopicsR = getCaller >>= listTopics >>= returnJson
 
 postMeTopicsR :: Handler Value
 postMeTopicsR = do
-    sid <- reader localServer
-    cid <- extractUserId
-    create <- requireJsonBody :: Handler TopicCreate
-    --todo random topic ids
-    tid <- maybe (sendResponseStatus status400 $ reasonObject "id_required" []) return (createId create)
-    let newTopic = createTopic sid cid tid create
-        firstMember = Member (TopicCoordKey sid cid tid) (UserCoordKey sid cid) modeCreator
-    --create a topic and insert the creator
-    r <- runDb $ do
-        tcRes <- insertByAll newTopic
-        --if topic insertion did not fail constraints, neither should first member insertion
-        insertByAll firstMember
-        return tcRes
-    eitherConst (sendResponseStatus status400 $ reasonObject "id_in_use" []) (returnJson newTopic) r
-
-{-postMeTopicsR' :: Handler Value
-postMeTopicsR' = do
     caller <- getCaller
-    creation <- requireJsonBody :: Handler TopicCreate
-    res <- createTopicOp caller creation-}
-    
+    create <- requireJsonBody
+    createTopic caller create >>= respondOpResult
 
 eitherConst :: c -> c -> Either a b -> c
 eitherConst l r = either (const l) (const r)
-
-createTopic :: ServerId -> UserId -> TopicId -> TopicCreate -> Topic
-createTopic sid uid tid (TopicCreate _ mBanner mInfo mMode) = Topic {
-    topicServer = sid,
-    topicUser = uid,
-    topicId = tid,
-    topicBanner = fromMaybe "" mBanner,
-    topicInfo = fromMaybe storableEmpty mInfo,
-    topicMode = fromMaybe defaultTopicMode mMode
-}
-
-
 
 getLocalUserR :: UserId -> Handler Value
 getLocalUserR uid = toJSON <$> getLocalUser uid
@@ -78,3 +48,9 @@ getLocalUserTopicsR uid = reader (refLocalUser uid) >>= listTopics >>= returnJso
 listTopics :: (HasConn m cm conn, PersistBackend (DbPersist conn m)) => UserRef -> m [TopicRef]
 listTopics = runDb . listTopicsOp
 
+putSubsLocalR :: UserId -> TopicId -> Handler Value
+putSubsLocalR uid tid = do
+    caller <- getCaller
+    let tr = TopicCoordKey (userRefServer caller) uid tid
+    joinTopic caller tr >>= respondOpResult
+    

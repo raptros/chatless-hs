@@ -30,7 +30,7 @@ instance PersistField StorableJson where
     persistName _ = "StorableJson"
     toPersistValues = primToPersistValue
     fromPersistValues = primFromPersistValue
-    dbType _ = DbTypePrimitive DbString False Nothing Nothing
+    dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField StorableJson where
     toPrimitivePersistValue p (StorableJson bs) = toPrimitivePersistValue p bs

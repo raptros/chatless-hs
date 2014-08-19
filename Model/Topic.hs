@@ -12,6 +12,7 @@ import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.TH
 import qualified Data.HashMap.Strict as H
+import Data.Maybe (fromMaybe)
 
 import Model.User
 import Model.Utils
@@ -85,6 +86,12 @@ instance NeverNull TopicMode
 
 type TopicRef = Key Topic (Unique TopicCoord)
 
+topicRefUserRef :: TopicRef -> UserRef
+topicRefUserRef (TopicCoordKey sid uid _) = UserCoordKey sid uid
+
+topicRefId :: TopicRef -> TopicId
+topicRefId (TopicCoordKey _ _ tid) = tid
+
 topicRefObject :: TopicRef -> Object
 topicRefObject (TopicCoordKey sid uid tid) = H.fromList ["server" .= sid, "user" .= uid, "topic" .= tid]
 
@@ -102,3 +109,14 @@ fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid
 
 isCreator :: UserRef -> Topic -> Bool
 isCreator (UserCoordKey sid uid) t = (sid == topicServer t) && (uid == topicUser t)
+
+initializeTopic :: UserRef -> TopicId -> TopicCreate -> Topic
+initializeTopic caller tid (TopicCreate _ mBanner mInfo mMode) = Topic {
+    topicServer = userRefServer caller,
+    topicUser = userRefUser caller,
+    topicId = tid,
+    topicBanner = fromMaybe "" mBanner,
+    topicInfo = fromMaybe storableEmpty mInfo,
+    topicMode = fromMaybe defaultTopicMode mMode
+}
+

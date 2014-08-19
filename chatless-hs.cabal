@@ -21,13 +21,17 @@ library
   -- other-extensions:    
   build-depends:
     base >=4.7 && <4.8,
-    groundhog,
+    groundhog == 0.6.*,
     groundhog-th,
     groundhog-sqlite,
+    groundhog-postgresql,
     safe,
+    mtl,
     yesod-core,
     aeson,
+    random,
     MonadRandom,
+    uuid,
     lens
     
   -- hs-source-dirs:      

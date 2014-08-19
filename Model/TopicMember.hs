@@ -4,8 +4,10 @@ module Model.TopicMember where
 import Data.Text hiding (drop)
 import qualified Data.Char as C
 
+import Data.Maybe
 import Data.Aeson
 import Data.Aeson.TH
+import Control.Lens hiding ((.=))
 
 import Database.Groundhog
 import Database.Groundhog.Core
@@ -30,6 +32,8 @@ data MemberMode = MemberMode {
 } deriving (Eq, Show)
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 2 } ''MemberMode)
+
+makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''MemberMode
 
 modeCreator :: MemberMode
 modeCreator = MemberMode {
@@ -75,6 +79,13 @@ $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''Member
 subsetAsJson :: UserRef -> MemberMode -> Value
 subsetAsJson ur mm = object ["user" .= ur, "mode" .= mm]
 
+data MemberPartial = MemberPartial {
+    mPartUser :: UserRef,
+    mPartMode :: MemberMode
+} deriving (Eq, Show)
+
+$(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 5 } ''MemberPartial)
+
 mkPersist defaultCodegenConfig [groundhog|
 - embedded: MemberMode
   fields:
@@ -115,3 +126,42 @@ mkPersist defaultCodegenConfig [groundhog|
 |]
 
 instance NeverNull MemberMode
+
+data MemberModeUpdate = MemberModeUpdate {
+    mmuRead :: Maybe Bool,
+    mmuWrite :: Maybe Bool,
+    mmuVoiced :: Maybe Bool,
+    mmuInvite :: Maybe Bool,
+    mmuSetMember :: Maybe Bool,
+    mmuSetBanner :: Maybe Bool,
+    mmuSetInfo :: Maybe Bool,
+    mmuSetMode :: Maybe Bool
+} deriving (Eq, Show)
+
+defaultMMU :: MemberModeUpdate
+defaultMMU = MemberModeUpdate Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+
+$(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 3 } ''MemberModeUpdate)
+
+makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''MemberModeUpdate
+
+pickField :: (a -> t) -> (b -> Maybe t) -> a -> b -> t
+pickField fa fb a b = fromMaybe (fa a) (fb b)
+
+setMaybe :: ASetter s t b b -> Maybe b -> s -> t
+setMaybe l mb = over l (flip fromMaybe mb)
+
+infixr 4 .~?
+(.~?) :: ASetter s t b b -> Maybe b -> s -> t
+(.~?) = setMaybe
+
+resolveMemberModeUpdate :: MemberMode -> MemberModeUpdate -> MemberMode
+resolveMemberModeUpdate mm mmu = mm &
+    mmReadLens .~? mmu ^. mmuReadLens & 
+    mmWriteLens .~? mmu ^. mmuWriteLens & 
+    mmVoicedLens .~? mmu ^. mmuVoicedLens & 
+    mmInviteLens .~? mmu ^. mmuInviteLens & 
+    mmSetMemberLens .~? mmu ^. mmuSetMemberLens & 
+    mmSetBannerLens .~? mmu ^. mmuSetBannerLens & 
+    mmSetInfoLens .~? mmu ^. mmuSetInfoLens & 
+    mmSetModeLens .~? mmu ^. mmuSetModeLens

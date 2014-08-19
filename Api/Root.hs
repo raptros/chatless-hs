@@ -56,11 +56,15 @@ mkYesodData "Chatless" [parseRoutes|
 /me/invites MeInvitesTopicSubR TopicSub getMeInvitesTopicSub
 /me/topic MeTopicsR GET POST
 /me/topic/#TopicId MeTopicSubR TopicSub getMeTopicSub
+-- subscription system
+/me/sub/user/#UserId/topic/#TopicId SubsLocalR PUT
+-- local users
 /user/#UserId LocalUserR GET
 /user/#UserId/about LocalUserAboutTopicSubR TopicSub getLocalUserAboutTopicSub
 /user/#UserId/invites LocalUserInvitesTopicSubR TopicSub getLocalUserInvitesTopicSub
 /user/#UserId/topic LocalUserTopicsR GET
 /user/#UserId/topic/#TopicId LocalUserTopicSubR TopicSub getLocalUserTopicSub
+-- todo remote topics
 -- /server/#ServerId/user/#UserId AnyUserR GET
 -- /server/#ServerId/user/#UserId/topic AnyUserTopicsR GET
 -- /server/#ServerId/user/#UserId/ AnyUserR GET

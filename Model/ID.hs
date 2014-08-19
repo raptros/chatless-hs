@@ -44,7 +44,7 @@ instance PersistField ServerId where
     persistName _ = "ServerId"
     toPersistValues = primToPersistValue
     fromPersistValues = primFromPersistValue
-    dbType _ = DbTypePrimitive DbString False Nothing Nothing
+    dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField ServerId where
     toPrimitivePersistValue p (ServerId id) = toPrimitivePersistValue p id
@@ -54,7 +54,7 @@ instance PersistField UserId where
     persistName _ = "UserId"
     toPersistValues = primToPersistValue
     fromPersistValues = primFromPersistValue
-    dbType _ = DbTypePrimitive DbString False Nothing Nothing
+    dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField UserId where
     toPrimitivePersistValue p (UserId id) = toPrimitivePersistValue p id
@@ -64,7 +64,7 @@ instance PersistField TopicId where
     persistName _ = "TopicId"
     toPersistValues = primToPersistValue
     fromPersistValues = primFromPersistValue
-    dbType _ = DbTypePrimitive DbString False Nothing Nothing
+    dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField TopicId where
     toPrimitivePersistValue p (TopicId id) = toPrimitivePersistValue p id
@@ -74,7 +74,7 @@ instance PersistField MessageId where
     persistName _ = "MessageId"
     toPersistValues = primToPersistValue
     fromPersistValues = primFromPersistValue
-    dbType _ = DbTypePrimitive DbString False Nothing Nothing
+    dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField MessageId where
     toPrimitivePersistValue p (MessageId id) = toPrimitivePersistValue p id
