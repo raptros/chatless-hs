@@ -11,6 +11,7 @@ import Model.User
 import Model.Topic
 import Control.Monad.Except
 import Operations
+import Control.Lens ((&))
 
 reasonObject :: Text -> [(Text, Value)] -> Value
 reasonObject r d = object $ ("reason" .= r) : d
@@ -21,37 +22,35 @@ returnErrorObject = ((return . toTypedContent) .) . reasonObject
 notImplemented :: MonadHandler m => m Value
 notImplemented = sendResponseStatus status501 ()
 
-userNotFound :: MonadHandler m => ServerId -> UserId -> m a
-userNotFound sid uid = sendResponseStatus notFound404 $ reasonObject "not_found" ["coordinate" .= object ["server" .= sid, "user" .= uid]]
-
-topicNotFound :: MonadHandler m => TopicRef -> m a
-topicNotFound tr = sendResponseStatus notFound404 $ reasonObject "not_found" ["coordinate" .= tr]
-
 --todo this is of course stupid
 extractUserId :: (MonadHandler m) => m UserId
 extractUserId = lookupHeader "x-chatless-test-uid" >>= maybe notAuthenticated (return . UserId . decodeUtf8)
 
-meNotPresent :: MonadHandler m => UserRef -> m a
-meNotPresent ref= sendResponseStatus status500 $ reasonObject "me_not_present" ["coordinate" .= ref]
-
 respondOpResult :: (MonadHandler m, ToJSON a) => Either OpError a -> m Value
 respondOpResult = either respondOpError returnJson
 
+respondOp :: (MonadHandler m) => Either OpError a -> m a
+respondOp = either respondOpError return
+
+objection :: MonadHandler m => Status -> Text -> [(Text, Value)] -> m a
+objection s t v = sendResponseStatus s $ reasonObject t v
+
 respondOpError :: MonadHandler m => OpError -> m a
-respondOpError (MeNotFound ur) = sendResponseStatus internalServerError500 $ reasonObject "me_not_found" ["coordinate" .= ur]
-respondOpError (TopicNotFound tr) = sendResponseStatus notFound404 $ reasonObject "topic_not_found" ["coordinate" .= tr]
-respondOpError (UserNotFound ur) = sendResponseStatus notFound404 $ reasonObject "user_not_found" ["coordinate" .= ur]
-respondOpError (MemberNotFound tr ur) = sendResponseStatus notFound404 $ reasonObject "member_not_found" ["topic" .= tr, "user" .= ur]
-respondOpError (OperationDenied ot) = sendResponseStatus forbidden403 $ reasonObject "forbidden" ["operation" .= opTypeName ot]
+respondOpError (MeNotFound ur) = objection internalServerError500 "not_found" ["me" .= ur]
+respondOpError (TopicNotFound tr) = objection notFound404 "not_found" ["topic" .= tr]
+respondOpError (UserNotFound ur) = objection notFound404 "not_found" ["user" .= ur]
+respondOpError (MemberNotFound tr ur) = objection notFound404 "not_found" ["topic" .= tr, "user" .= ur]
+respondOpError (MessageNotFound mr) = objection notFound404 "not_found" ["message" .= mr]
+respondOpError (OperationDenied ot) = objection forbidden403 "forbidden" ["operation" .= opTypeName ot]
+respondOpError (IdInUse tr) = objection badRequest400 "id_in_use" ["topic" .= tr]
+respondOpError (GenerateIdFailed ur ids) = objection internalServerError500 "generate_id_failed" ["user" .= ur, "tried" .= ids]
+respondOpError (GenerateMessageIdFailed tr ids) = objection internalServerError500 "generate_id_failed" ["topic" .= tr, "tried" .= ids]
+respondOpError (MessageIdInUse mr) = objection badRequest400 "id_in_use" ["message" .= mr] --wtf tho
+respondOpError (LoadMessageFailed mr) = objection internalServerError500 "load_message_failed" ["message" .= mr]
 
 opTypeName :: OpType -> Text
 opTypeName ReadTopic = "read_topic"
 opTypeName SetMemberMode = "set_member_mode"
-               {-
-    MeNotFound UserRef |
-    TopicNotFound TopicRef |
-    UserNotFound UserRef |
-    MemberNotFound TopicRef UserRef |
-    OperationDenied OpType |
-    IdInUse TopicRef |
-GenerateIdFailed UserRef [TopicId]-}
+opTypeName SetTopicMode = "set_topic_mode"
+opTypeName SendMessage = "send_message"
+opTypeName SetBanner = "set_banner"

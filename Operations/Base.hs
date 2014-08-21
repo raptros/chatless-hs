@@ -4,6 +4,7 @@ module Operations.Base where
 import Model.ID
 import Model.User
 import Model.Topic
+import Model.Message
 import Control.Monad.Except
 import Control.Monad.Logger
 import Control.Monad.Catch
@@ -16,7 +17,10 @@ import Data.Typeable
 
 data OpType = 
     ReadTopic |
-    SetMemberMode
+    SetMemberMode |
+    SetTopicMode |
+    SendMessage |
+    SetBanner
     deriving (Show, Typeable)
 
 data OpError = 
@@ -24,9 +28,13 @@ data OpError =
     TopicNotFound TopicRef |
     UserNotFound UserRef |
     MemberNotFound TopicRef UserRef |
+    MessageNotFound MessageRef |
     OperationDenied OpType |
     IdInUse TopicRef |
-    GenerateIdFailed UserRef [TopicId]
+    GenerateIdFailed UserRef [TopicId] |
+    GenerateMessageIdFailed TopicRef [MessageId] |
+    MessageIdInUse MessageRef |
+    LoadMessageFailed MessageRef
     deriving (Show, Typeable)
 
 instance Exception OpError

@@ -105,15 +105,15 @@ messageMigration = do
     migrate (undefined :: MsgContent)
     migrate (undefined :: MsgHandle)
 
-type MsgRef = Key MsgHandle (Unique MessageCoord)
+type MessageRef = Key MsgHandle (Unique MessageCoord)
 
-msgRefObject :: MsgRef -> Object
+msgRefObject :: MessageRef -> Object
 msgRefObject (MessageCoordKey tr id) = (uncurry H.insert) ("message" .= id) (topicRefObject tr) 
 
-instance ToJSON MsgRef where
+instance ToJSON MessageRef where
     toJSON = Object . msgRefObject
 
-instance FromJSON MsgRef where
+instance FromJSON MessageRef where
     parseJSON = withObject "MessageCoordKey" $ \v -> MessageCoordKey <$> (parseJSON $ Object v) <*> (v .: "message")
 
 data Message = Message {
@@ -137,3 +137,7 @@ instance FromJSON Message where
                 o .: "id" <*> 
                 o .: "sender" <*> 
                 msgContentFromObject o
+
+handleFromMessage :: AutoKey MsgContent -> Message -> MsgHandle
+handleFromMessage k (Message tr id sender _) = MsgHandle tr id sender k
+

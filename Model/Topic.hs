@@ -14,6 +14,8 @@ import Database.Groundhog.TH
 import qualified Data.HashMap.Strict as H
 import Data.Maybe (fromMaybe)
 
+import Control.Lens hiding ((.=))
+
 import Model.User
 import Model.Utils
 import Model.ID
@@ -33,6 +35,8 @@ defaultTopicMode :: TopicMode
 defaultTopicMode = TopicMode True True False True True
 
 $(deriveJSON defaultOptions ''TopicMode)
+
+makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''TopicMode
 
 data TopicCreate = TopicCreate {
     createId :: Maybe TopicId,
@@ -119,4 +123,24 @@ initializeTopic caller tid (TopicCreate _ mBanner mInfo mMode) = Topic {
     topicInfo = fromMaybe storableEmpty mInfo,
     topicMode = fromMaybe defaultTopicMode mMode
 }
+
+data TopicModeUpdate = TopicModeUpdate {
+    updateReadable :: Maybe Bool,
+    updateWritable :: Maybe Bool,
+    updateMuted :: Maybe Bool,
+    updateMembersOnly :: Maybe Bool,
+    updateAuthenticatedOnly :: Maybe Bool
+} deriving (Show, Eq)
+
+$(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''TopicModeUpdate)
+
+makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''TopicModeUpdate
+
+resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> TopicMode
+resolveTopicModeUpdate tm tmu = tm &
+    readableLens .~? tmu ^. updateReadableLens &
+    writableLens  .~? tmu ^. updateWritableLens &
+    mutedLens .~? tmu ^. updateMutedLens &
+    membersOnlyLens .~? tmu ^. updateMembersOnlyLens &
+    authenticatedOnlyLens .~? tmu ^. updateAuthenticatedOnlyLens
 

@@ -68,6 +68,9 @@ joinerMode tm = modeDeny { mmRead = readable tm, mmWrite = writable tm }
 invitedMode :: TopicMode -> MemberMode
 invitedMode tm = modeDeny { mmRead = True, mmWrite = writable tm }
 
+canSend :: TopicMode -> MemberMode -> Bool
+canSend tm mm = mmWrite mm && (not (muted tm) || mmVoiced mm)
+
 data Member = Member {
     memberTopic :: TopicRef,
     memberUser :: UserRef,
@@ -144,16 +147,6 @@ defaultMMU = MemberModeUpdate Nothing Nothing Nothing Nothing Nothing Nothing No
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 3 } ''MemberModeUpdate)
 
 makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''MemberModeUpdate
-
-pickField :: (a -> t) -> (b -> Maybe t) -> a -> b -> t
-pickField fa fb a b = fromMaybe (fa a) (fb b)
-
-setMaybe :: ASetter s t b b -> Maybe b -> s -> t
-setMaybe l mb = over l (flip fromMaybe mb)
-
-infixr 4 .~?
-(.~?) :: ASetter s t b b -> Maybe b -> s -> t
-(.~?) = setMaybe
 
 resolveMemberModeUpdate :: MemberMode -> MemberModeUpdate -> MemberMode
 resolveMemberModeUpdate mm mmu = mm &

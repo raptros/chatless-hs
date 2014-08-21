@@ -32,7 +32,7 @@ instance PathPiece TopicId where
     toPathPiece (TopicId i) = i
     fromPathPiece = Just . TopicId
 
-newtype MessageId = MessageId Text deriving (Eq, Show)
+newtype MessageId = MessageId Text deriving (Eq, Show, Read)
 
 instance PathPiece MessageId where
     toPathPiece (MessageId i) = i

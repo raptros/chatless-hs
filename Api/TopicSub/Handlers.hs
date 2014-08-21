@@ -9,6 +9,7 @@ import Operations
 import Yesod.Core
 import Safe
 
+import Model.StorableJson
 import Model.ID
 import Model.User
 import Model.Message
@@ -32,44 +33,26 @@ type TopicHandler a = HandlerT TopicSub Handler a
 --type ChatlessTopicHandler a = TopicHandler Chatless a
 
 getTopicR :: TopicHandler Value
-getTopicR = do
-    tc <- readTopicRef
-    mTopic <- lift $ runDb $ getBy tc
-    maybe notFound returnJson mTopic
+getTopicR = readTopicRef >>= lift . getTopic >>= respondOpResult
 
-readTopicRef :: TopicHandler TopicRef
-readTopicRef = ask >>= getTopicRef
+getTopicModeR :: TopicHandler Value
+getTopicModeR = readTopicRef >>= lift . getTopic >>= respondOpResult . fmap topicMode
 
-getTopicRef :: TopicSub -> TopicHandler TopicRef
---getTopicRef (MeTopicSub sid tid) = (\uid -> TopicCoordKey sid uid tid) <$> extractUserId
---getTopicRef (MeAboutTopicSub sid) = pickTopicFromUser userAbout sid <$> loadMe sid
---getTopicRef (MeInvitesTopicSub sid) = pickTopicFromUser userInvite sid <$> loadMe sid
---each of these refers to the current session's user
-getTopicRef (MeTopicSub tid) =    lift $ fromUserRef tid <$> getCaller
-getTopicRef (MeAboutTopicSub) =   lift $ pickTopicFromUser userAbout <$> loadMe
-getTopicRef (MeInvitesTopicSub) = lift $ pickTopicFromUser userInvite <$> loadMe
---these refer to a local user
-getTopicRef (LocalUserTopicSub uid tid) =    lift $ (\sid -> TopicCoordKey sid uid tid) <$> reader localServer
-getTopicRef (LocalUserAboutTopicSub uid) =   lift $ pickTopicFromUser userAbout <$> getLocalUser uid
-getTopicRef (LocalUserInvitesTopicSub uid) = lift $ pickTopicFromUser userInvite <$>  getLocalUser uid
---these refer to any user
-getTopicRef (AnyUserAboutTopicSub sid uid) =   lift $ pickTopicFromUser userAbout <$> getAnyUser sid uid
-getTopicRef (AnyUserInvitesTopicSub sid uid) = lift $ pickTopicFromUser userInvite <$> getAnyUser sid uid
-getTopicRef (AnyUserTopicSub sid uid tid) =  return $ TopicCoordKey sid uid tid
-
+putTopicModeR :: TopicHandler Value
+putTopicModeR = do
+    callerRef <- lift getCaller
+    tr <- readTopicRef
+    newMode <- requireJsonBody
+    lift (setTopicMode callerRef tr newMode) >>= respondOpResult
 
 pickTopicFromUser :: (User -> TopicId) -> User -> TopicRef
 pickTopicFromUser c u = TopicCoordKey (userServer u) (userId u) (c u)
 
---getTopic = do
-    --
 getMembersR :: TopicHandler Value
 getMembersR = do
     callerRef <- lift getCaller
     tr <- readTopicRef
-    membersRes <- lift $ listMembers callerRef tr
-    respondOpResult membersRes
-
+    lift (listMembers callerRef tr) >>= respondOpResult
 
 getMemberR :: ServerId -> UserId -> TopicHandler Value
 getMemberR sid uid = do 
@@ -85,23 +68,11 @@ putMemberR sid uid = do
     newMode <- requireJsonBody :: TopicHandler MemberModeUpdate
     tr <- readTopicRef
     callerRef <- lift getCaller
-    res <- lift $ setMemberMode callerRef tr targetUser newMode 
-    respondOpResult res
+    lift (setMemberMode callerRef tr targetUser newMode) >>= respondOpResult
 
 -- action: invite a new member to the topic
 postMemberR :: ServerId -> UserId -> TopicHandler Value
 postMemberR sid uid = sendResponseStatus notImplemented501 $ reasonObject "not_implemented" []
-
-
---listTopics :: (HasConn m cm conn, PersistBackend (DbPersist conn m)) => ServerId -> UserId -> m [TopicRef]
-{-
-getCallerEffectiveMode :: (MonadHandler m, MonadReader Chatless m, HasConn m cm conn, PersistBackend (DbPersist conn m)) => Topic -> m MemberMode
-getCallerEffectiveMode topic = do
-    sid <- reader localServer
-    cid <- extractUserId
-    if cid == topicUser topic then return modeCreator else findMember
-    where findMember = runDb $ getBy $ TargetMemberKey (extractUnique topic) (UserCoordKey sid cid) >>= fromMaybe (nonMemberMode $ mode topic)
-          -}
 
 getLocalMemberR :: UserId -> TopicHandler Value
 getLocalMemberR = useForLocal getMemberR
@@ -115,12 +86,78 @@ postLocalMemberR = useForLocal postMemberR
 useForLocal :: (ServerId -> UserId -> TopicHandler a) -> UserId -> TopicHandler a
 useForLocal h = (lift (reader localServer) >>=) . flip h
 
+getMsgR :: TopicHandler Value
+getMsgR = getMsgFirstR 1
 
+postMsgR :: TopicHandler Value
+postMsgR = do
+    caller <- lift getCaller
+    tr <- readTopicRef
+    body <- requireJsonBody :: TopicHandler StorableJson
+    lift (sendMessage caller tr body) >>= respondOpResult
 
-{-
-getLocalUserTopicR :: UserId -> TopicId -> Handler Value
-getLocalUserTopicR uid tid = do
-    lserv <- reader localServer
-    mTopic <- runDb $ getBy $ TopicCoordKey lserv uid tid
-    maybe notFound returnJson mTopic
--}
+getMsgFirst1R :: TopicHandler Value
+getMsgFirst1R = getMsgFirstR 1
+
+getMsgFirstR :: Int -> TopicHandler Value
+getMsgFirstR = getMsgFromEndR True
+
+getMsgLast1R :: TopicHandler Value
+getMsgLast1R = getMsgLastR 1
+
+getMsgLastR :: Int -> TopicHandler Value
+getMsgLastR = getMsgFromEndR False
+
+getMsgFromEndR :: Bool -> Int -> TopicHandler Value
+getMsgFromEndR forward count = do 
+    caller <- lift getCaller
+    tr <- readTopicRef
+    lift (getFromEnd forward caller tr count) >>= respondOpResult
+
+getMsgBefore1R :: MessageId -> TopicHandler Value
+getMsgBefore1R = flip getMsgBeforeR 1
+
+getMsgBeforeR :: MessageId -> Int -> TopicHandler Value
+getMsgBeforeR = getMsgByIdR False False 
+
+getMsgAfter1R :: MessageId -> TopicHandler Value
+getMsgAfter1R = flip getMsgAfterR 1
+
+getMsgAfterR :: MessageId -> Int -> TopicHandler Value
+getMsgAfterR = getMsgByIdR True False
+
+getMsgAt1R :: MessageId -> TopicHandler Value
+getMsgAt1R = flip getMsgAtR 1
+
+getMsgAtR :: MessageId -> Int -> TopicHandler Value
+getMsgAtR = getMsgByIdR False True
+
+getMsgFrom1R :: MessageId -> TopicHandler Value
+getMsgFrom1R = flip getMsgFromR 1
+
+getMsgFromR :: MessageId -> Int -> TopicHandler Value
+getMsgFromR = getMsgByIdR True True
+
+getMsgByIdR :: Bool -> Bool -> MessageId -> Int -> TopicHandler Value
+getMsgByIdR forward inclusive id count = do
+    caller <- lift getCaller
+    tr <- readTopicRef
+    lift (getFromId forward inclusive caller tr id count) >>= respondOpResult
+
+readTopicRef :: TopicHandler TopicRef
+readTopicRef = ask >>= getTopicRef
+
+getTopicRef :: TopicSub -> TopicHandler TopicRef
+--each of these refers to the current session's user
+getTopicRef (MeTopicSub tid) =    lift $ fromUserRef tid <$> getCaller
+getTopicRef (MeAboutTopicSub) =   lift $ pickTopicFromUser userAbout <$> loadMe
+getTopicRef (MeInvitesTopicSub) = lift $ pickTopicFromUser userInvite <$> loadMe
+--these refer to a local user
+getTopicRef (LocalUserTopicSub uid tid) =    lift $ (\sid -> TopicCoordKey sid uid tid) <$> reader localServer
+getTopicRef (LocalUserAboutTopicSub uid) =   lift $ pickTopicFromUser userAbout <$> getLocalUser uid
+getTopicRef (LocalUserInvitesTopicSub uid) = lift $ pickTopicFromUser userInvite <$>  getLocalUser uid
+--these refer to any user
+getTopicRef (AnyUserAboutTopicSub sid uid) =   lift $ pickTopicFromUser userAbout <$> getAnyUser sid uid
+getTopicRef (AnyUserInvitesTopicSub sid uid) = lift $ pickTopicFromUser userInvite <$> getAnyUser sid uid
+getTopicRef (AnyUserTopicSub sid uid tid) =  return $ TopicCoordKey sid uid tid
+

@@ -22,31 +22,23 @@ import Api.Root
 import Api.RootUtils
 
 getMeR :: Handler Value
-getMeR = do
-    meRef <- getCaller
-    me <- runDb $ getBy meRef
-    maybe (meNotPresent meRef) returnJson me
+getMeR = getCaller >>= loadUser MeNotFound >>= respondOpResult
 
 getMeTopicsR :: Handler Value
-getMeTopicsR = getCaller >>= listTopics >>= returnJson
+getMeTopicsR = getCaller >>= listTopics >>= respondOpResult
 
 postMeTopicsR :: Handler Value
 postMeTopicsR = do
     caller <- getCaller
     create <- requireJsonBody
     createTopic caller create >>= respondOpResult
-
-eitherConst :: c -> c -> Either a b -> c
-eitherConst l r = either (const l) (const r)
+--postMeTopicsR = hold2 <$> getCaller <*> requireJsonBody >>= (createTopic &) >>= respondOpResult
 
 getLocalUserR :: UserId -> Handler Value
-getLocalUserR uid = toJSON <$> getLocalUser uid
+getLocalUserR uid = reader (refLocalUser uid) >>= loadUser UserNotFound >>= respondOpResult
 
 getLocalUserTopicsR :: UserId -> Handler Value
-getLocalUserTopicsR uid = reader (refLocalUser uid) >>= listTopics >>= returnJson
-
-listTopics :: (HasConn m cm conn, PersistBackend (DbPersist conn m)) => UserRef -> m [TopicRef]
-listTopics = runDb . listTopicsOp
+getLocalUserTopicsR uid = reader (refLocalUser uid) >>= listTopics >>= respondOpResult
 
 putSubsLocalR :: UserId -> TopicId -> Handler Value
 putSubsLocalR uid tid = do

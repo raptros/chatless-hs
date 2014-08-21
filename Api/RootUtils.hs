@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleContexts, ConstraintKinds #-}
 module Api.RootUtils where
 
 import Data.Aeson
@@ -18,28 +18,22 @@ import Control.Monad.Reader
 import Control.Applicative
 import Data.Maybe
 import Network.HTTP.Types
+import Operations
 
 getCaller :: (MonadHandler m, MonadReader Chatless m) => m UserRef
 getCaller = UserCoordKey <$> reader localServer <*>  extractUserId
 
+loadMe :: (MonadHandler m, MonadReader Chatless m, CatchDbConn m cm conn) => m User
+loadMe = getCaller >>= loadUser MeNotFound >>= respondOp
 
-getLocalUser :: (MonadHandler m, MonadReader Chatless m, HasConn m cm conn, PersistBackend (DbPersist conn m)) => UserId -> m User
-getLocalUser uid = do
-        sid <- reader localServer
-        mUser <- runDb $ getBy $ UserCoordKey sid uid
-        maybe (userNotFound sid uid) return mUser
+getLocalUser :: (MonadHandler m, MonadReader Chatless m, CatchDbConn m cm conn) => UserId -> m User
+getLocalUser uid = reader (refLocalUser uid) >>= loadUser UserNotFound >>= respondOp
 
-getAnyUser :: (MonadHandler m, MonadReader Chatless m, HasConn m cm conn, PersistBackend (DbPersist conn m)) => ServerId -> UserId -> m User
+getAnyUser :: (MonadHandler m, MonadReader Chatless m, CatchDbConn m cm conn) => ServerId -> UserId -> m User
 getAnyUser sid uid = do
     lserver <- reader localServer
     unless (sid == lserver) $ sendResponseStatus notImplemented501 $ reasonObject "not_implemented" ["operation" .= ("request_remote_user" :: Text), "server" .= sid]
     getLocalUser uid
-
-loadMe :: (MonadHandler m, MonadReader Chatless m, HasConn m cm conn, PersistBackend (DbPersist conn m)) => m User
-loadMe = do
-    meRef <- getCaller
-    mUser <- runDb $ getBy meRef
-    maybe (meNotPresent meRef) return mUser
 
 refLocalUser :: UserId -> Chatless -> UserRef
 refLocalUser = flip $ UserCoordKey . localServer
