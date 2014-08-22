@@ -6,12 +6,9 @@ import Model.User
 import Model.Topic
 import Model.Message
 import Control.Monad.Except
-import Control.Monad.Logger
 import Control.Monad.Catch
 import Database.Groundhog
 import Database.Groundhog.Generic
-import qualified Data.Text as T
-import qualified Control.Monad.Trans.Class as Trans
 import Control.Monad.Random
 import Data.Typeable
 

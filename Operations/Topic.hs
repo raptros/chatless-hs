@@ -77,13 +77,12 @@ createTopic ur tc = runOp $ do
     tid <- maybe genRandom return $ createId tc
     let tr = fromUserRef tid ur
         newTopic = initializeTopic ur tid tc
-        firstMember = Member tr ur modeCreator
         givenId = isJust $ createId tc
     --create a topic and insert the creator
     tcRes <- insertByAll newTopic
     when (isLeft tcRes) $ throwM $ checkedFailure givenId ur tr
-    insert firstMember
-    --insert a message
+    insert $ Member tr ur modeCreator
+    opCreateMessage ur tr $ MsgUserJoined modeCreator
     return newTopic
 
 checkedFailure :: Bool -> UserRef -> TopicRef -> OpError

@@ -5,7 +5,7 @@ module Model.StorableJson (StorableJson, storableObject, storableEmpty) where
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
 import Control.Applicative
-import Database.Groundhog
+import Database.Groundhog()
 import Database.Groundhog.Core
 import Database.Groundhog.Generic (primToPersistValue, primFromPersistValue)
 import Data.Aeson

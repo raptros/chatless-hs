@@ -1,21 +1,14 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
 module Model.TopicMember where
 
-import Data.Text hiding (drop)
-import qualified Data.Char as C
-
-import Data.Maybe
 import Data.Aeson
 import Data.Aeson.TH
 import Control.Lens hiding ((.=))
 
-import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.TH
 
 import Model.Utils
-import Model.ID
-import Model.StorableJson
 import Model.User
 import Model.Topic
 

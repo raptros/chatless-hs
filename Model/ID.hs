@@ -4,7 +4,6 @@ import Data.Text
 import Data.Aeson
 import Data.Aeson.TH
 import Web.PathPieces
-import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.Generic (primToPersistValue, primFromPersistValue)
 
@@ -47,7 +46,7 @@ instance PersistField ServerId where
     dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField ServerId where
-    toPrimitivePersistValue p (ServerId id) = toPrimitivePersistValue p id
+    toPrimitivePersistValue p (ServerId sid) = toPrimitivePersistValue p sid
     fromPrimitivePersistValue p x = ServerId $ fromPrimitivePersistValue p x
 
 instance PersistField UserId where
@@ -57,7 +56,7 @@ instance PersistField UserId where
     dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField UserId where
-    toPrimitivePersistValue p (UserId id) = toPrimitivePersistValue p id
+    toPrimitivePersistValue p (UserId uid) = toPrimitivePersistValue p uid
     fromPrimitivePersistValue p x = UserId $ fromPrimitivePersistValue p x
 
 instance PersistField TopicId where
@@ -67,7 +66,7 @@ instance PersistField TopicId where
     dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField TopicId where
-    toPrimitivePersistValue p (TopicId id) = toPrimitivePersistValue p id
+    toPrimitivePersistValue p (TopicId tid) = toPrimitivePersistValue p tid
     fromPrimitivePersistValue p x = TopicId $ fromPrimitivePersistValue p x
 
 instance PersistField MessageId where
@@ -77,5 +76,5 @@ instance PersistField MessageId where
     dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
 
 instance PrimitivePersistField MessageId where
-    toPrimitivePersistValue p (MessageId id) = toPrimitivePersistValue p id
+    toPrimitivePersistValue p (MessageId mid) = toPrimitivePersistValue p mid
     fromPrimitivePersistValue p x = MessageId $ fromPrimitivePersistValue p x

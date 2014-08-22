@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Model.IDGen where
 import Data.Text
-import Data.Aeson
-import Data.Aeson.TH
-import Web.PathPieces
 import qualified Data.Text as T
 import qualified Data.UUID as UUID
 import System.Random

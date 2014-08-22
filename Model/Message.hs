@@ -2,10 +2,7 @@
 module Model.Message where
 
 import Data.Text hiding (drop)
-import qualified Data.Char as C
-
 import Data.Aeson
-import Data.Aeson.TH
 import Data.Aeson.Types (Pair, Parser, typeMismatch)
 
 import Database.Groundhog
@@ -14,7 +11,6 @@ import Database.Groundhog.TH
 
 import Model.User
 import Model.Topic
-import Model.Utils
 import Model.TopicMember
 import Model.ID
 import Model.StorableJson
@@ -22,7 +18,6 @@ import Model.StorableJson
 import qualified Data.HashMap.Strict as H
 
 import Control.Applicative
-import Control.Monad
 import Data.Monoid
 
 data MsgContent = 
@@ -40,7 +35,7 @@ msgContentFields (MsgBannerChanged banner) = ["banner" .= banner]
 msgContentFields (MsgUserJoined mode) = ["mode" .= mode] -- note that we are using "mode"
 msgContentFields (MsgTopicModeChanged mode) = ["mode" .= mode] -- for both Topic Mode and User Mode.
 msgContentFields (MsgMemberModeChanged member mode) = ["member" .= member, "mode" .= mode]
-msgContentFields (MsgInvitation join mode body) = ["join" .= join, "mode" .= mode, "body" .= body]
+msgContentFields (MsgInvitation tr mode body) = ["join" .= tr, "mode" .= mode, "body" .= body]
 msgContentFields (MsgInvitedUser member fromTopic mode) = ["member" .= member, "from" .= fromTopic, "mode" .= mode ]
 
 msgContentObject :: MsgContent -> Object
@@ -108,7 +103,7 @@ messageMigration = do
 type MessageRef = Key MsgHandle (Unique MessageCoord)
 
 msgRefObject :: MessageRef -> Object
-msgRefObject (MessageCoordKey tr id) = (uncurry H.insert) ("message" .= id) (topicRefObject tr) 
+msgRefObject (MessageCoordKey tr mid) = (uncurry H.insert) ("message" .= mid) (topicRefObject tr) 
 
 instance ToJSON MessageRef where
     toJSON = Object . msgRefObject
@@ -139,5 +134,5 @@ instance FromJSON Message where
                 msgContentFromObject o
 
 handleFromMessage :: AutoKey MsgContent -> Message -> MsgHandle
-handleFromMessage k (Message tr id sender _) = MsgHandle tr id sender k
+handleFromMessage k (Message tr mid sender _) = MsgHandle tr mid sender k
 

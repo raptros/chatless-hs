@@ -1,12 +1,9 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
 module Model.Topic where
 
-import Data.Text hiding (drop)
-import qualified Data.Char as C
-
 import Data.Aeson
 import Data.Aeson.TH
-import Data.Aeson.Types (Pair, Parser, typeMismatch)
+import Data.Aeson.Types (Parser)
 
 import Database.Groundhog
 import Database.Groundhog.Core
