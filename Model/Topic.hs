@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
+{-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs, MultiParamTypeClasses, FunctionalDependencies #-}
 module Model.Topic where
 
 import Data.Aeson
@@ -33,7 +33,7 @@ defaultTopicMode = TopicMode True True False True True
 
 $(deriveJSON defaultOptions ''TopicMode)
 
-makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''TopicMode
+makeLensesWith (lensRules & lensField .~ const lensName) ''TopicMode
 
 data TopicCreate = TopicCreate {
     createId :: Maybe TopicId,
@@ -131,7 +131,7 @@ data TopicModeUpdate = TopicModeUpdate {
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''TopicModeUpdate)
 
-makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''TopicModeUpdate
+makeLensesWith (lensRules & lensField .~ const lensName)  ''TopicModeUpdate
 
 resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> TopicMode
 resolveTopicModeUpdate tm tmu = tm &

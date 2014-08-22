@@ -26,7 +26,7 @@ data MemberMode = MemberMode {
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 2 } ''MemberMode)
 
-makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''MemberMode
+makeLensesWith (lensRules & lensField .~ const lensName) ''MemberMode
 
 modeCreator :: MemberMode
 modeCreator = MemberMode {
@@ -139,7 +139,7 @@ defaultMMU = MemberModeUpdate Nothing Nothing Nothing Nothing Nothing Nothing No
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 3 } ''MemberModeUpdate)
 
-makeLensesWith (set lensField (\s -> Just (s ++ "Lens")) lensRules) ''MemberModeUpdate
+makeLensesWith (lensRules & lensField .~ const lensName) ''MemberModeUpdate
 
 resolveMemberModeUpdate :: MemberMode -> MemberModeUpdate -> MemberMode
 resolveMemberModeUpdate mm mmu = mm &

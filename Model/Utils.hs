@@ -3,6 +3,12 @@ import qualified Data.Char as C
 import Data.Maybe
 import Control.Lens
 
+import Language.Haskell.TH
+import Language.Haskell.TH.Lens
+
+lensName :: Name -> [DefName]
+lensName n = [TopName $ mkName (nameBase n ++ "Lens")]
+
 modifyHead :: (a -> a) -> [a] -> [a]
 modifyHead _ [] = []
 modifyHead f (x:xs) = (f x):xs
