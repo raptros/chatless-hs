@@ -15,17 +15,27 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
-library
+executable "chatless"
   -- exposed-modules:     
   -- other-modules:       
   -- other-extensions:    
+  main-is: Main.hs
   build-depends:
     base >=4.7 && <4.8,
     groundhog == 0.6.*,
     groundhog-th,
     groundhog-sqlite,
     groundhog-postgresql,
+    transformers,
     safe,
+    text,
+    bytestring,
+    monad-logger,
+    resource-pool,
+    http-types,
+    path-pieces,
+    unordered-containers,
+    exceptions,
     mtl,
     yesod-core,
     aeson,

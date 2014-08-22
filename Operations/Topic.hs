@@ -91,7 +91,10 @@ checkedFailure True _ = IdInUse
 checkedFailure False ur = GenerateIdFailed ur . (:[]) . topicRefId
 
 joinTopic :: CatchDbConn m cm conn => UserRef -> TopicRef -> m (Either OpError MemberMode)
-joinTopic = (runOp .) . joinTopicOp
+joinTopic caller tr = runOp $ do
+    mode <- joinTopicOp caller tr
+    opCreateMessage caller tr $ MsgUserJoined mode
+    return mode
 
 joinTopicOp :: (MonadThrow m, PersistBackend m) => UserRef -> TopicRef -> m MemberMode
 joinTopicOp cr tr = do

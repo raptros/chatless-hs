@@ -45,7 +45,7 @@ respondOpError (OperationDenied ot) = objection forbidden403 "forbidden" ["opera
 respondOpError (IdInUse tr) = objection badRequest400 "id_in_use" ["topic" .= tr]
 respondOpError (GenerateIdFailed ur ids) = objection internalServerError500 "generate_id_failed" ["user" .= ur, "tried" .= ids]
 respondOpError (GenerateMessageIdFailed tr ids) = objection internalServerError500 "generate_id_failed" ["topic" .= tr, "tried" .= ids]
-respondOpError (MessageIdInUse mr) = objection badRequest400 "id_in_use" ["message" .= mr] --wtf tho
+respondOpError (MessageIdInUse mr) = objection badRequest400 "id_in_use" ["message" .= mr] --basically not something we should see.
 respondOpError (LoadMessageFailed mr) = objection internalServerError500 "load_message_failed" ["message" .= mr]
 
 opTypeName :: OpType -> Text

@@ -39,9 +39,9 @@ msgContentFields (MsgPosted body) = ["body" .= body]
 msgContentFields (MsgBannerChanged banner) = ["banner" .= banner]
 msgContentFields (MsgUserJoined mode) = ["mode" .= mode] -- note that we are using "mode"
 msgContentFields (MsgTopicModeChanged mode) = ["mode" .= mode] -- for both Topic Mode and User Mode.
-msgContentFields (MsgMemberModeChanged member mode) = ["user" .= member, "mode" .= mode]
+msgContentFields (MsgMemberModeChanged member mode) = ["member" .= member, "mode" .= mode]
 msgContentFields (MsgInvitation join mode body) = ["join" .= join, "mode" .= mode, "body" .= body]
-msgContentFields (MsgInvitedUser member fromTopic mode) = ["user" .= member, "from" .= fromTopic, "mode" .= mode ]
+msgContentFields (MsgInvitedUser member fromTopic mode) = ["member" .= member, "from" .= fromTopic, "mode" .= mode ]
 
 msgContentObject :: MsgContent -> Object
 msgContentObject = H.fromList . msgContentFields
@@ -52,9 +52,9 @@ instance ToJSON MsgContent where
 -- parsing a message content object is, unsurprisingly, complex.
 msgContentFromObject :: Object -> Parser MsgContent
 msgContentFromObject o 
-    | hasUser && hasFrom && hasMode = MsgInvitedUser <$> o .: "user" <*> o .: "from" <*> o .: "mode"
+    | hasMember && hasFrom && hasMode = MsgInvitedUser <$> o .: "member" <*> o .: "from" <*> o .: "mode"
     | hasJoin && hasMode && hasBody = MsgInvitation <$> o .: "join" <*> o .: "mode" <*> o .: "body"
-    | hasUser && hasMode = MsgMemberModeChanged <$> o .: "user" <*> o .: "mode"
+    | hasMember && hasMode = MsgMemberModeChanged <$> o .: "member" <*> o .: "mode"
     | hasMode = (MsgTopicModeChanged <$> o .: "mode") <|> 
                 (MsgUserJoined <$> o .: "mode") <|> 
                 (typeMismatch "TopicMode or MemberMode" $ o H.! "mode") -- it is known that o contains "mode".
@@ -67,7 +67,7 @@ msgContentFromObject o
           hasMode = hasField "mode"
           hasJoin = hasField "join"
           hasFrom = hasField "from"
-          hasUser = hasField "user"
+          hasMember  = hasField "member"
 
 instance FromJSON MsgContent where
     parseJSON = withObject "MsgContent" msgContentFromObject
