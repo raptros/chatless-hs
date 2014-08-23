@@ -1,39 +1,41 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 module Api.TopicSub.Handlers where
+
+import Control.Applicative ((<$>))
+import Control.Monad.Reader (reader, ask)
+import Control.Monad.Trans.Class (lift)
+import Data.Aeson (Value)
+import Yesod.Core.Handler (HandlerT)
+import Yesod.Core.Json (requireJsonBody)
+
+import Model.StorableJson (StorableJson)
+import Model.ID (ServerId, UserId, TopicId, MessageId)
+import Model.User (User, userServer, userId, userAbout, userInvite, Key(UserCoordKey))
+import Model.Message()
+import Model.Topic (topicMode, TopicRef, fromUserRef, Key(TopicCoordKey))
+import Model.TopicMember
 
 import Api.Utils
 import Api.TopicSub.Data
 import Api.Root
 import Api.RootUtils
-import Operations
-import Yesod.Core
-import Safe
 
-import Model.StorableJson
-import Model.ID
-import Model.User
-import Model.Message()
-import Model.Topic
-import Model.TopicMember
-import Network.HTTP.Types
-import Control.Applicative
-import Control.Monad.Reader
+import qualified Operations as Op
 
 type TopicHandler a = HandlerT TopicSub Handler a
---type ChatlessTopicHandler a = TopicHandler Chatless a
 
 getTopicR :: TopicHandler Value
-getTopicR = readTopicRef >>= lift . getTopic >>= respondOpResult
+getTopicR = readTopicRef >>= lift . Op.getTopic >>= respondOpResult
 
 getTopicModeR :: TopicHandler Value
-getTopicModeR = readTopicRef >>= lift . getTopic >>= respondOpResult . fmap topicMode
+getTopicModeR = readTopicRef >>= lift . Op.getTopic >>= respondOpResult . fmap topicMode
 
 putTopicModeR :: TopicHandler Value
 putTopicModeR = do
     callerRef <- lift getCaller
     tr <- readTopicRef
     newMode <- requireJsonBody
-    lift (setTopicMode callerRef tr newMode) >>= respondOpResult
+    lift (Op.setTopicMode callerRef tr newMode) >>= respondOpResult
 
 pickTopicFromUser :: (User -> TopicId) -> User -> TopicRef
 pickTopicFromUser c u = TopicCoordKey (userServer u) (userId u) (c u)
@@ -42,14 +44,14 @@ getMembersR :: TopicHandler Value
 getMembersR = do
     callerRef <- lift getCaller
     tr <- readTopicRef
-    lift (listMembers callerRef tr) >>= respondOpResult
+    lift (Op.listMembers callerRef tr) >>= respondOpResult
 
 getMemberR :: ServerId -> UserId -> TopicHandler Value
 getMemberR sid uid = do 
     caller <- lift getCaller
     tr <- readTopicRef
     let ur = UserCoordKey sid uid
-    lift (getMember caller tr ur) >>= respondOpResult
+    lift (Op.getMember caller tr ur) >>= respondOpResult
         
 -- action: set the mode of an existing member.
 putMemberR :: ServerId -> UserId -> TopicHandler Value
@@ -58,17 +60,16 @@ putMemberR sid uid = do
     newMode <- requireJsonBody :: TopicHandler MemberModeUpdate
     tr <- readTopicRef
     callerRef <- lift getCaller
-    lift (setMemberMode callerRef tr targetUser newMode) >>= respondOpResult
+    lift (Op.setMemberMode callerRef tr targetUser newMode) >>= respondOpResult
 
 -- action: invite a new member to the topic
-
 postMemberR :: ServerId -> UserId -> TopicHandler Value
 postMemberR sid uid = do
     caller <- lift getCaller
     let targetUser = UserCoordKey sid uid
     tr <- readTopicRef
     invite <- requireJsonBody :: TopicHandler StorableJson
-    lift (inviteToTopic caller tr (UserCoordKey sid uid) invite) >>= respondOpResult
+    lift (Op.inviteToTopic caller tr (UserCoordKey sid uid) invite) >>= respondOpResult
 
 getLocalMemberR :: UserId -> TopicHandler Value
 getLocalMemberR = useForLocal getMemberR
@@ -90,7 +91,7 @@ postMsgR = do
     caller <- lift getCaller
     tr <- readTopicRef
     body <- requireJsonBody :: TopicHandler StorableJson
-    lift (sendMessage caller tr body) >>= respondOpResult
+    lift (Op.sendMessage caller tr body) >>= respondOpResult
 
 getMsgFirst1R :: TopicHandler Value
 getMsgFirst1R = getMsgFirstR 1
@@ -108,7 +109,7 @@ getMsgFromEndR :: Bool -> Int -> TopicHandler Value
 getMsgFromEndR forward count = do 
     caller <- lift getCaller
     tr <- readTopicRef
-    lift (getFromEnd forward caller tr count) >>= respondOpResult
+    lift (Op.getFromEnd forward caller tr count) >>= respondOpResult
 
 getMsgBefore1R :: MessageId -> TopicHandler Value
 getMsgBefore1R = flip getMsgBeforeR 1
@@ -138,7 +139,7 @@ getMsgByIdR :: Bool -> Bool -> MessageId -> Int -> TopicHandler Value
 getMsgByIdR forward inclusive id count = do
     caller <- lift getCaller
     tr <- readTopicRef
-    lift (getFromId forward inclusive caller tr id count) >>= respondOpResult
+    lift (Op.getFromId forward inclusive caller tr id count) >>= respondOpResult
 
 readTopicRef :: TopicHandler TopicRef
 readTopicRef = ask >>= getTopicRef

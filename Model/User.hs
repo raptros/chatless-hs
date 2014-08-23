@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, QuasiQuotes, TypeFamilies, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
-module Model.User where
+module Model.User (User(..), UserRef, Key(UserCoordKey), userRefServer, userRefUser) where
 import Database.Groundhog
 import Database.Groundhog.TH
 import Data.Aeson

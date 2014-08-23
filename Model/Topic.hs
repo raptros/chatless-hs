@@ -1,5 +1,24 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs, MultiParamTypeClasses, FunctionalDependencies #-}
-module Model.Topic where
+module Model.Topic (
+    TopicMode(..),
+    defaultTopicMode,
+    aboutTopicMode,
+    inviteTopicMode,
+    Topic(..),
+    TopicCreate(..),
+    TopicRef,
+    Field(..),
+    TopicCoord(..),
+    Key(TopicCoordKey),
+    isCreator,
+    fromUserRef,
+    topicRefId,
+    initializeTopic,
+    topicRefObject,
+    topicRefFromObject,
+    TopicModeUpdate(..),
+    resolveTopicModeUpdate
+    ) where
 
 import Data.Aeson
 import Data.Aeson.TH
