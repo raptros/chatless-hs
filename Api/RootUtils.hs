@@ -9,29 +9,23 @@ import Yesod.Core
 
 import Model.ID
 import Model.User
-import Model.Topic
-import Model.TopicMember
-import Model.StorableJson
-import Database.Groundhog
-import Database.Groundhog.Generic (runDb, HasConn)
 import Control.Monad.Reader
 import Control.Applicative
-import Data.Maybe
 import Network.HTTP.Types
 import Operations
 
-getCaller :: (MonadHandler m, MonadReader Chatless m) => m UserRef
-getCaller = UserCoordKey <$> reader localServer <*>  extractUserId
+getCaller :: (MonadHandler m, HandlerSite m ~ Chatless) => m UserRef
+getCaller = UserCoordKey <$> (localServer <$> getYesod) <*>  extractUserId
 
-loadMe :: (MonadHandler m, MonadReader Chatless m, CatchDbConn m cm conn) => m User
+loadMe :: (MonadHandler m, HandlerSite m ~ Chatless, CatchDbConn m cm conn) => m User
 loadMe = getCaller >>= loadUser MeNotFound >>= respondOp
 
-getLocalUser :: (MonadHandler m, MonadReader Chatless m, CatchDbConn m cm conn) => UserId -> m User
-getLocalUser uid = reader (refLocalUser uid) >>= loadUser UserNotFound >>= respondOp
+getLocalUser :: (MonadHandler m, HandlerSite m ~ Chatless, CatchDbConn m cm conn) => UserId -> m User
+getLocalUser uid = (refLocalUser uid) <$> getYesod >>= loadUser UserNotFound >>= respondOp
 
-getAnyUser :: (MonadHandler m, MonadReader Chatless m, CatchDbConn m cm conn) => ServerId -> UserId -> m User
+getAnyUser :: (MonadHandler m, HandlerSite m ~ Chatless, CatchDbConn m cm conn) => ServerId -> UserId -> m User
 getAnyUser sid uid = do
-    lserver <- reader localServer
+    lserver <- localServer <$> getYesod
     unless (sid == lserver) $ sendResponseStatus notImplemented501 $ reasonObject "not_implemented" ["operation" .= ("request_remote_user" :: Text), "server" .= sid]
     getLocalUser uid
 

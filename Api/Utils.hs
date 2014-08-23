@@ -47,6 +47,7 @@ respondOpError (GenerateIdFailed ur ids) = objection internalServerError500 "gen
 respondOpError (GenerateMessageIdFailed tr ids) = objection internalServerError500 "generate_id_failed" ["topic" .= tr, "tried" .= ids]
 respondOpError (MessageIdInUse mr) = objection badRequest400 "id_in_use" ["message" .= mr] --basically not something we should see.
 respondOpError (LoadMessageFailed mr) = objection internalServerError500 "load_message_failed" ["message" .= mr]
+respondOpError (AlreadyMember tr ur) = objection badRequest400 "already_member" ["topic" .= tr, "user" .= ur]
 
 opTypeName :: OpType -> Text
 opTypeName ReadTopic = "read_topic"
@@ -54,3 +55,4 @@ opTypeName SetMemberMode = "set_member_mode"
 opTypeName SetTopicMode = "set_topic_mode"
 opTypeName SendMessage = "send_message"
 opTypeName SetBanner = "set_banner"
+opTypeName InviteUser = "invite_user"

@@ -5,6 +5,7 @@ import Data.Aeson
 import Data.Aeson.TH
 import Data.Aeson.Types (Parser)
 
+import qualified Data.Text as T
 import Database.Groundhog
 import Database.Groundhog.Core
 import Database.Groundhog.TH
@@ -31,13 +32,19 @@ data TopicMode = TopicMode {
 defaultTopicMode :: TopicMode
 defaultTopicMode = TopicMode True True False True True
 
+aboutTopicMode :: TopicMode
+aboutTopicMode = TopicMode True False False True True
+
+inviteTopicMode :: TopicMode
+inviteTopicMode = TopicMode False True False True True
+
 $(deriveJSON defaultOptions ''TopicMode)
 
 makeLensesWith (lensRules & lensField .~ const lensName) ''TopicMode
 
 data TopicCreate = TopicCreate {
     createId :: Maybe TopicId,
-    createBanner :: Maybe String,
+    createBanner :: Maybe T.Text,
     createInfo :: Maybe StorableJson,
     createMode :: Maybe TopicMode
 } deriving (Eq, Show)
@@ -48,7 +55,7 @@ data Topic = Topic {
     topicServer :: ServerId,
     topicUser :: UserId,
     topicId :: TopicId,
-    topicBanner :: String,
+    topicBanner :: T.Text,
     topicInfo :: StorableJson,
     topicMode :: TopicMode
 } deriving (Eq, Show)

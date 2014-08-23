@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Model.ID where
 import Data.Text
-import Data.Aeson
+import Data.Aeson()
 import Data.Aeson.TH
 import Web.PathPieces
+import Database.Groundhog()
 import Database.Groundhog.Core
 import Database.Groundhog.Generic (primToPersistValue, primFromPersistValue)
 

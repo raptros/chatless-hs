@@ -53,7 +53,7 @@ filterTail p (a:as) = a:(filterTail p as)
 mkYesodData "Chatless" [parseRoutes|
 /me MeR GET
 /me/about MeAboutTopicSubR TopicSub getMeAboutTopicSub 
-/me/invites MeInvitesTopicSubR TopicSub getMeInvitesTopicSub
+/me/invite MeInviteTopicSubR TopicSub getMeInviteTopicSub
 /me/topic MeTopicsR GET POST
 /me/topic/#TopicId MeTopicSubR TopicSub getMeTopicSub
 -- subscription system
@@ -61,7 +61,7 @@ mkYesodData "Chatless" [parseRoutes|
 -- local users
 /user/#UserId LocalUserR GET
 /user/#UserId/about LocalUserAboutTopicSubR TopicSub getLocalUserAboutTopicSub
-/user/#UserId/invites LocalUserInvitesTopicSubR TopicSub getLocalUserInvitesTopicSub
+/user/#UserId/invite LocalUserInviteTopicSubR TopicSub getLocalUserInviteTopicSub
 /user/#UserId/topic LocalUserTopicsR GET
 /user/#UserId/topic/#TopicId LocalUserTopicSubR TopicSub getLocalUserTopicSub
 -- todo remote topics
@@ -69,7 +69,7 @@ mkYesodData "Chatless" [parseRoutes|
 -- /server/#ServerId/user/#UserId/topic AnyUserTopicsR GET
 -- /server/#ServerId/user/#UserId/ AnyUserR GET
 -- /server/#ServerId/user/#UserId/about AnyUserAboutTopicSubR TopicSub getAnyUserAboutTopicSub
--- /server/#ServerId/user/#UserId/invites AnyUserInvitesTopicSubR TopicSub getAnyUserInvitesTopicSub
+-- /server/#ServerId/user/#UserId/invite AnyUserInviteTopicSubR TopicSub getAnyUserInviteTopicSub
 -- /server/#ServerId/user/#UserId/topic/#TopicId AnyUserTopicSubR TopicSub getAnyUserTopicSub
 |]
 
@@ -77,14 +77,14 @@ giveServer :: (ServerId -> b) -> Chatless -> b
 giveServer = (. localServer)
 
 getMeAboutTopicSub = const MeAboutTopicSub
-getMeInvitesTopicSub = const MeInvitesTopicSub
+getMeInviteTopicSub = const MeInviteTopicSub
 getMeTopicSub = const MeTopicSub
 
 getLocalUserAboutTopicSub = const LocalUserAboutTopicSub 
-getLocalUserInvitesTopicSub = const LocalUserInvitesTopicSub 
+getLocalUserInviteTopicSub = const LocalUserInviteTopicSub 
 getLocalUserTopicSub = const LocalUserTopicSub
 
 getAnyUserAboutTopicSub = const AnyUserAboutTopicSub
-getAnyUserInvitesTopicSub = const AnyUserInvitesTopicSub
+getAnyUserInviteTopicSub = const AnyUserInviteTopicSub
 getAnyUserTopicSub = const AnyUserTopicSub
 

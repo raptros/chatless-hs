@@ -12,22 +12,12 @@ import Safe
 import Model.StorableJson
 import Model.ID
 import Model.User
-import Model.Message
+import Model.Message()
 import Model.Topic
 import Model.TopicMember
-import qualified Data.Text as T
-import Database.Groundhog
-import Database.Groundhog.Generic (runDb)
-import Database.Groundhog.Sqlite
-import Database.Groundhog.Postgresql
-import Database.Groundhog.Core (ConnectionManager(..))
 import Network.HTTP.Types
-import Data.Pool
-import Data.Maybe
-import Data.Text.Encoding (decodeUtf8)
 import Control.Applicative
 import Control.Monad.Reader
-import Control.Monad.Except
 
 type TopicHandler a = HandlerT TopicSub Handler a
 --type ChatlessTopicHandler a = TopicHandler Chatless a
@@ -71,8 +61,14 @@ putMemberR sid uid = do
     lift (setMemberMode callerRef tr targetUser newMode) >>= respondOpResult
 
 -- action: invite a new member to the topic
+
 postMemberR :: ServerId -> UserId -> TopicHandler Value
-postMemberR sid uid = sendResponseStatus notImplemented501 $ reasonObject "not_implemented" []
+postMemberR sid uid = do
+    caller <- lift getCaller
+    let targetUser = UserCoordKey sid uid
+    tr <- readTopicRef
+    invite <- requireJsonBody :: TopicHandler StorableJson
+    lift (inviteToTopic caller tr (UserCoordKey sid uid) invite) >>= respondOpResult
 
 getLocalMemberR :: UserId -> TopicHandler Value
 getLocalMemberR = useForLocal getMemberR
@@ -151,13 +147,13 @@ getTopicRef :: TopicSub -> TopicHandler TopicRef
 --each of these refers to the current session's user
 getTopicRef (MeTopicSub tid) =    lift $ fromUserRef tid <$> getCaller
 getTopicRef (MeAboutTopicSub) =   lift $ pickTopicFromUser userAbout <$> loadMe
-getTopicRef (MeInvitesTopicSub) = lift $ pickTopicFromUser userInvite <$> loadMe
+getTopicRef (MeInviteTopicSub) = lift $ pickTopicFromUser userInvite <$> loadMe
 --these refer to a local user
 getTopicRef (LocalUserTopicSub uid tid) =    lift $ (\sid -> TopicCoordKey sid uid tid) <$> reader localServer
 getTopicRef (LocalUserAboutTopicSub uid) =   lift $ pickTopicFromUser userAbout <$> getLocalUser uid
-getTopicRef (LocalUserInvitesTopicSub uid) = lift $ pickTopicFromUser userInvite <$>  getLocalUser uid
+getTopicRef (LocalUserInviteTopicSub uid) = lift $ pickTopicFromUser userInvite <$>  getLocalUser uid
 --these refer to any user
 getTopicRef (AnyUserAboutTopicSub sid uid) =   lift $ pickTopicFromUser userAbout <$> getAnyUser sid uid
-getTopicRef (AnyUserInvitesTopicSub sid uid) = lift $ pickTopicFromUser userInvite <$> getAnyUser sid uid
+getTopicRef (AnyUserInviteTopicSub sid uid) = lift $ pickTopicFromUser userInvite <$> getAnyUser sid uid
 getTopicRef (AnyUserTopicSub sid uid tid) =  return $ TopicCoordKey sid uid tid
 

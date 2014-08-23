@@ -20,12 +20,12 @@ import Data.Text.Encoding (decodeUtf8)
 
 data TopicSub = MeTopicSub TopicId |
                 MeAboutTopicSub |
-                MeInvitesTopicSub |
+                MeInviteTopicSub |
                 LocalUserTopicSub UserId TopicId |
                 LocalUserAboutTopicSub UserId |
-                LocalUserInvitesTopicSub UserId |
+                LocalUserInviteTopicSub UserId |
                 AnyUserAboutTopicSub ServerId UserId |
-                AnyUserInvitesTopicSub ServerId UserId |
+                AnyUserInviteTopicSub ServerId UserId |
                 AnyUserTopicSub ServerId UserId TopicId
 
 

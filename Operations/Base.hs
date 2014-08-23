@@ -9,7 +9,6 @@ import Control.Monad.Except
 import Control.Monad.Catch
 import Database.Groundhog
 import Database.Groundhog.Generic
-import Control.Monad.Random
 import Data.Typeable
 
 data OpType = 
@@ -17,7 +16,8 @@ data OpType =
     SetMemberMode |
     SetTopicMode |
     SendMessage |
-    SetBanner
+    SetBanner |
+    InviteUser
     deriving (Show, Typeable)
 
 data OpError = 
@@ -31,7 +31,8 @@ data OpError =
     GenerateIdFailed UserRef [TopicId] |
     GenerateMessageIdFailed TopicRef [MessageId] |
     MessageIdInUse MessageRef |
-    LoadMessageFailed MessageRef
+    LoadMessageFailed MessageRef |
+    AlreadyMember TopicRef UserRef
     deriving (Show, Typeable)
 
 instance Exception OpError
@@ -53,15 +54,6 @@ instance MonadLogger m => MonadLogger (ExceptT e m) where
 
 instance MonadThrow m => MonadThrow (DbPersist conn m) where
     throwM = lift . throwM
-
-instance (MonadThrow m, RandomGen g) => MonadThrow (RandT g m) where
-    throwM = lift . throwM
-
-instance MonadRandom m => MonadRandom (DbPersist conn m) where
-    getRandom = lift  getRandom
-    getRandoms = lift getRandoms
-    getRandomR = lift . getRandomR
-    getRandomRs = lift . getRandomRs
 
 type CatchDbConn m cm conn = (HasConn m cm conn, MonadCatch m, PersistBackend (DbPersist conn m))
 
