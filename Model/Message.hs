@@ -1,24 +1,22 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
 module Model.Message where
 
-import Data.Text hiding (drop)
-import Data.Aeson
-import Data.Aeson.Types (Pair, Parser, typeMismatch)
-
-import Database.Groundhog
-import Database.Groundhog.Core
-import Database.Groundhog.TH
-
-import Model.User
-import Model.Topic
-import Model.TopicMember
-import Model.ID
-import Model.StorableJson
-
+import Data.Text (Text)
 import qualified Data.HashMap.Strict as H
+import Data.Aeson (ToJSON, FromJSON, (.=), (.:), Object, Value(..), withObject, parseJSON, toJSON)
+import Data.Aeson.Types (Pair, Parser, typeMismatch)
+import Data.Monoid ((<>))
+import Control.Applicative ((<$>), (<*>), (<|>))
 
-import Control.Applicative
-import Data.Monoid
+import Database.Groundhog (DefaultKey, PersistBackend, Unique, AutoKey, migrate, Key)
+import Database.Groundhog.Core (Migration)
+import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog, namingStyle, persistentNamingStyle)
+
+import Model.StorableJson (StorableJson)
+import Model.ID (MessageId)
+import Model.User (UserRef)
+import Model.Topic (TopicMode, TopicRef, topicRefObject, topicRefFromObject)
+import Model.TopicMember (MemberMode)
 
 data MsgContent = 
     MsgPosted { mcBody :: StorableJson } |
@@ -52,11 +50,11 @@ msgContentFromObject o
     | hasMember && hasMode = MsgMemberModeChanged <$> o .: "member" <*> o .: "mode"
     | hasMode = (MsgTopicModeChanged <$> o .: "mode") <|> 
                 (MsgUserJoined <$> o .: "mode") <|> 
-                (typeMismatch "TopicMode or MemberMode" $ o H.! "mode") -- it is known that o contains "mode".
+                typeMismatch "TopicMode or MemberMode" (o H.! "mode") -- it is known that o contains "mode".
     | hasBanner = MsgBannerChanged <$> o .: "banner"
     | hasBody = MsgPosted <$> o .: "body"
     | otherwise = typeMismatch "MsgContent" $ Object o
-    where hasField = (flip H.member) o
+    where hasField = flip H.member o
           hasBody = hasField "body"
           hasBanner = hasField "banner"
           hasMode = hasField "mode"
@@ -103,13 +101,13 @@ messageMigration = do
 type MessageRef = Key MsgHandle (Unique MessageCoord)
 
 msgRefObject :: MessageRef -> Object
-msgRefObject (MessageCoordKey tr mid) = (uncurry H.insert) ("message" .= mid) (topicRefObject tr) 
+msgRefObject (MessageCoordKey tr mid) = uncurry H.insert ("message" .= mid) (topicRefObject tr) 
 
 instance ToJSON MessageRef where
     toJSON = Object . msgRefObject
 
 instance FromJSON MessageRef where
-    parseJSON = withObject "MessageCoordKey" $ \v -> MessageCoordKey <$> (parseJSON $ Object v) <*> (v .: "message")
+    parseJSON = withObject "MessageCoordKey" $ \v -> MessageCoordKey <$> parseJSON (Object v) <*> (v .: "message")
 
 data Message = Message {
     msgTopic :: TopicRef,
@@ -119,7 +117,7 @@ data Message = Message {
 }
 
 messageObject :: Message -> Object
-messageObject m = (topicRefObject (msgTopic m)) <> messageObjectParts <> (msgContentObject (msgData m))
+messageObject m = topicRefObject (msgTopic m) <> messageObjectParts <> msgContentObject (msgData m)
   where messageObjectParts = H.fromList ["id" .= msgId m, "sender" .= msgSender m]
 
 instance ToJSON Message where

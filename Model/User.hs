@@ -1,13 +1,17 @@
 {-# LANGUAGE FlexibleInstances, QuasiQuotes, TypeFamilies, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
 module Model.User (User(..), UserRef, Key(UserCoordKey), userRefServer, userRefUser) where
-import Database.Groundhog
-import Database.Groundhog.TH
-import Data.Aeson
-import Data.Aeson.TH
-import Model.ID
-import Model.Utils
-import Control.Applicative
+
+import Control.Applicative ((<$>), (<*>))
 import qualified Data.HashMap.Strict as H
+
+import Data.Aeson ((.=), Object, (.:), withObject, FromJSON, parseJSON, ToJSON, toJSON, Value(Object))
+import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
+
+import Database.Groundhog (Key, Unique)
+import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
+
+import Model.ID (ServerId, UserId, TopicId)
+import Model.Utils (dropAndLowerHead)
 
 data User = User {
     userServer :: ServerId,

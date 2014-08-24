@@ -1,9 +1,10 @@
 module Model.Utils where
-import qualified Data.Char as C
-import Data.Maybe
-import Control.Lens
 
-import Language.Haskell.TH
+import qualified Data.Char as C
+import Data.Maybe (fromMaybe)
+import Language.Haskell.TH (Name, mkName, nameBase)
+import Control.Lens.Setter (over, ASetter)
+import Control.Lens.TH (DefName(TopName))
 
 lensName :: Name -> [DefName]
 lensName n = [TopName $ mkName (nameBase n ++ "Lens")]

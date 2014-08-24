@@ -20,25 +20,27 @@ module Model.Topic (
     resolveTopicModeUpdate
     ) where
 
-import Data.Aeson
-import Data.Aeson.TH
+import Control.Applicative ((<$>), (<*>))
+
+import Data.Maybe (fromMaybe)
+import qualified Data.Text as T
+import qualified Data.HashMap.Strict as H
+
+import Data.Aeson (ToJSON, FromJSON, (.=), (.:), toJSON, parseJSON, Object, Value(..), withObject)
+import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
 import Data.Aeson.Types (Parser)
 
-import qualified Data.Text as T
-import Database.Groundhog
-import Database.Groundhog.Core
-import Database.Groundhog.TH
-import qualified Data.HashMap.Strict as H
-import Data.Maybe (fromMaybe)
+import Database.Groundhog.Core (Key, Field, Unique)
+import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
-import Control.Lens hiding ((.=))
+import Control.Lens.TH (makeLensesWith, lensRules, lensField)
+import Control.Lens.Operators ((&), (.~), (^.))
 
-import Model.User
-import Model.Utils
-import Model.ID
-import Model.StorableJson
+import Model.Utils (lensName, dropAndLowerHead, (.~?))
+import Model.ID (ServerId, UserId, TopicId)
+import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser)
+import Model.StorableJson (StorableJson, storableEmpty)
 
-import Control.Applicative
 
 data TopicMode = TopicMode {
     readable :: Bool,
@@ -108,8 +110,6 @@ mkPersist defaultCodegenConfig [groundhog|
         - name: topicMode
           dbName: mode
 |]
-
-instance NeverNull TopicMode
 
 type TopicRef = Key Topic (Unique TopicCoord)
 

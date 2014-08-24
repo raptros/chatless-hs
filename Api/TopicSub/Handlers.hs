@@ -11,16 +11,16 @@ import Yesod.Core.Json (requireJsonBody)
 import Model.StorableJson (StorableJson)
 import Model.ID (ServerId, UserId, TopicId, MessageId)
 import Model.User (User, userServer, userId, userAbout, userInvite, Key(UserCoordKey))
-import Model.Message()
 import Model.Topic (topicMode, TopicRef, fromUserRef, Key(TopicCoordKey))
-import Model.TopicMember
-
-import Api.Utils
-import Api.TopicSub.Data
-import Api.Root
-import Api.RootUtils
+import Model.TopicMember (MemberModeUpdate)
 
 import qualified Operations as Op
+
+import Api.Utils (respondOpResult)
+import Api.Root (Handler, localServer)
+import Api.RootUtils (getCaller, loadMe, getLocalUser, getAnyUser)
+import Api.TopicSub.Data (TopicSub(..))
+
 
 type TopicHandler a = HandlerT TopicSub Handler a
 

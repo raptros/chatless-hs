@@ -1,48 +1,40 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleContexts #-}
 module Api.Handlers where
 
-import Yesod.Core
-import qualified Data.Text as T
-import Database.Groundhog
-import Database.Groundhog.Generic (runDb, HasConn)
-import Control.Monad.Reader
-import Control.Applicative
-import Data.Maybe
-import Network.HTTP.Types
-import Data.Text.Encoding (decodeUtf8)
+import Data.Aeson (Value)
+import Control.Monad.Reader (reader)
+import Yesod.Core.Json (requireJsonBody)
 
-import Model.ID
-import Model.User
-import Model.Topic
-import Model.TopicMember
-import Model.StorableJson
-import Operations
-import Api.Utils
-import Api.Root
-import Api.RootUtils
+import Model.ID (ServerId, UserId, TopicId)
+import Model.Topic (fromUserRef)
+
+import qualified Operations as Op
+
+import Api.Utils (respondOpResult)
+import Api.Root (Handler)
+import Api.RootUtils (getCaller, refLocalUser)
 
 getMeR :: Handler Value
-getMeR = getCaller >>= loadUser MeNotFound >>= respondOpResult
+getMeR = getCaller >>= Op.loadUser Op.MeNotFound >>= respondOpResult
 
 getMeTopicsR :: Handler Value
-getMeTopicsR = getCaller >>= listTopics >>= respondOpResult
+getMeTopicsR = getCaller >>= Op.listTopics >>= respondOpResult
 
 postMeTopicsR :: Handler Value
 postMeTopicsR = do
     caller <- getCaller
     create <- requireJsonBody
-    createTopic caller create >>= respondOpResult
---postMeTopicsR = hold2 <$> getCaller <*> requireJsonBody >>= (createTopic &) >>= respondOpResult
+    Op.createTopic caller create >>= respondOpResult
 
 getLocalUserR :: UserId -> Handler Value
-getLocalUserR uid = reader (refLocalUser uid) >>= loadUser UserNotFound >>= respondOpResult
+getLocalUserR uid = reader (refLocalUser uid) >>= Op.loadUser Op.UserNotFound >>= respondOpResult
 
 getLocalUserTopicsR :: UserId -> Handler Value
-getLocalUserTopicsR uid = reader (refLocalUser uid) >>= listTopics >>= respondOpResult
+getLocalUserTopicsR uid = reader (refLocalUser uid) >>= Op.listTopics >>= respondOpResult
 
 putSubsLocalR :: UserId -> TopicId -> Handler Value
 putSubsLocalR uid tid = do
     caller <- getCaller
-    let tr = TopicCoordKey (userRefServer caller) uid tid
-    joinTopic caller tr >>= respondOpResult
+    localUser <- reader (refLocalUser uid)
+    Op.joinTopic caller (fromUserRef tid localUser) >>= respondOpResult
     

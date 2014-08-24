@@ -1,17 +1,19 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 module Api.Utils where
 
-import Yesod.Core
-import Data.Aeson
-import Data.Text
-import Network.HTTP.Types
+import Data.Aeson ((.=), object, Value, ToJSON)
+import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
-import Model.ID
-import Model.User
-import Model.Topic
-import Control.Monad.Except
-import Operations
-import Control.Lens ((&))
+import Network.HTTP.Types (Status, badRequest400, forbidden403, notFound404, internalServerError500, notImplemented501)
+
+import Yesod.Core (MonadHandler, TypedContent, toTypedContent)
+import Yesod.Core.Handler (lookupHeader, sendResponseStatus, notAuthenticated)
+import Yesod.Core.Json (returnJson)
+
+import Model.ID (UserId(..))
+import Model.User()
+import Model.Topic()
+import Operations (OpError(..), OpType(..))
 
 reasonObject :: Text -> [(Text, Value)] -> Value
 reasonObject r d = object $ ("reason" .= r) : d
@@ -20,7 +22,7 @@ returnErrorObject :: Monad m => Text -> [(Text, Value)] -> m TypedContent
 returnErrorObject = ((return . toTypedContent) .) . reasonObject
 
 notImplemented :: MonadHandler m => m Value
-notImplemented = sendResponseStatus status501 ()
+notImplemented = sendResponseStatus notImplemented501 ()
 
 --todo this is of course stupid
 extractUserId :: (MonadHandler m) => m UserId
@@ -48,6 +50,7 @@ respondOpError (GenerateMessageIdFailed tr ids) = objection internalServerError5
 respondOpError (MessageIdInUse mr) = objection badRequest400 "id_in_use" ["message" .= mr] --basically not something we should see.
 respondOpError (LoadMessageFailed mr) = objection internalServerError500 "load_message_failed" ["message" .= mr]
 respondOpError (AlreadyMember tr ur) = objection badRequest400 "already_member" ["topic" .= tr, "user" .= ur]
+respondOpError (NotImplemented ot) = objection notImplemented501 "not_implemented" ["operation" .= opTypeName ot]
 
 opTypeName :: OpType -> Text
 opTypeName ReadTopic = "read_topic"
@@ -56,3 +59,4 @@ opTypeName SetTopicMode = "set_topic_mode"
 opTypeName SendMessage = "send_message"
 opTypeName SetBanner = "set_banner"
 opTypeName InviteUser = "invite_user"
+opTypeName GetRemoteUser = "get_remote_user"

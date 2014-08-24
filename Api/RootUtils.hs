@@ -1,32 +1,30 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleContexts, ConstraintKinds #-}
 module Api.RootUtils where
 
-import Data.Aeson
-import Data.Text
-import Api.Utils
-import Api.Root
-import Yesod.Core
+import Control.Monad (unless)
+import Control.Applicative ((<$>), (<*>))
 
-import Model.ID
-import Model.User
-import Control.Monad.Reader
-import Control.Applicative
-import Network.HTTP.Types
-import Operations
+import Api.Utils (extractUserId, respondOpError, respondOp)
+import Api.Root (Chatless, localServer)
+import Yesod.Core (MonadHandler, HandlerSite, getYesod)
+
+import Model.ID (ServerId, UserId)
+import Model.User (UserRef, User, Key(UserCoordKey))
+import qualified Operations as Op
 
 getCaller :: (MonadHandler m, HandlerSite m ~ Chatless) => m UserRef
 getCaller = UserCoordKey <$> (localServer <$> getYesod) <*>  extractUserId
 
-loadMe :: (MonadHandler m, HandlerSite m ~ Chatless, CatchDbConn m cm conn) => m User
-loadMe = getCaller >>= loadUser MeNotFound >>= respondOp
+loadMe :: (MonadHandler m, HandlerSite m ~ Chatless, Op.CatchDbConn m cm conn) => m User
+loadMe = getCaller >>= Op.loadUser Op.MeNotFound >>= respondOp
 
-getLocalUser :: (MonadHandler m, HandlerSite m ~ Chatless, CatchDbConn m cm conn) => UserId -> m User
-getLocalUser uid = (refLocalUser uid) <$> getYesod >>= loadUser UserNotFound >>= respondOp
+getLocalUser :: (MonadHandler m, HandlerSite m ~ Chatless, Op.CatchDbConn m cm conn) => UserId -> m User
+getLocalUser uid = (refLocalUser uid) <$> getYesod >>= Op.loadUser Op.UserNotFound >>= respondOp
 
-getAnyUser :: (MonadHandler m, HandlerSite m ~ Chatless, CatchDbConn m cm conn) => ServerId -> UserId -> m User
+getAnyUser :: (MonadHandler m, HandlerSite m ~ Chatless, Op.CatchDbConn m cm conn) => ServerId -> UserId -> m User
 getAnyUser sid uid = do
     lserver <- localServer <$> getYesod
-    unless (sid == lserver) $ sendResponseStatus notImplemented501 $ reasonObject "not_implemented" ["operation" .= ("request_remote_user" :: Text), "server" .= sid]
+    unless (sid == lserver) $ respondOpError (Op.NotImplemented Op.GetRemoteUser)
     getLocalUser uid
 
 refLocalUser :: UserId -> Chatless -> UserRef

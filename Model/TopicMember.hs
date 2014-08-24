@@ -1,16 +1,15 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
 module Model.TopicMember where
 
-import Data.Aeson
-import Data.Aeson.TH
-import Control.Lens hiding ((.=))
+import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
+import Control.Lens.TH (makeLensesWith, lensRules, lensField)
+import Control.Lens.Operators ((&), (.~), (^.))
 
-import Database.Groundhog.Core
-import Database.Groundhog.TH
+import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
-import Model.Utils
-import Model.User
-import Model.Topic
+import Model.Utils (dropAndLowerHead, lensName, (.~?))
+import Model.User (UserRef)
+import Model.Topic (TopicMode(..), TopicRef)
 
 
 data MemberMode = MemberMode {
@@ -72,8 +71,8 @@ data Member = Member {
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''Member)
 
-subsetAsJson :: UserRef -> MemberMode -> Value
-subsetAsJson ur mm = object ["user" .= ur, "mode" .= mm]
+--subsetAsJson :: UserRef -> MemberMode -> Value
+--subsetAsJson ur mm = object ["user" .= ur, "mode" .= mm]
 
 data MemberPartial = MemberPartial {
     mPartUser :: UserRef,
@@ -120,8 +119,6 @@ mkPersist defaultCodegenConfig [groundhog|
         - name: memberMode
           dbName: mode
 |]
-
-instance NeverNull MemberMode
 
 data MemberModeUpdate = MemberModeUpdate {
     mmuRead :: Maybe Bool,

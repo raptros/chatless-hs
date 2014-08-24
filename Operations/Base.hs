@@ -1,15 +1,16 @@
 {-# LANGUAGE ConstraintKinds, OverloadedStrings, FlexibleContexts, DeriveDataTypeable, MultiParamTypeClasses, FlexibleInstances #-}
 module Operations.Base where
 
-import Model.ID
-import Model.User
-import Model.Topic
-import Model.Message
-import Control.Monad.Except
-import Control.Monad.Catch
-import Database.Groundhog
-import Database.Groundhog.Generic
-import Data.Typeable
+import Control.Monad.Catch (MonadThrow, MonadCatch, Exception, throwM, try)
+import Control.Monad.Trans.Class (lift)
+import Database.Groundhog (DbPersist, PersistBackend)
+import Database.Groundhog.Generic (HasConn, runDb)
+import Data.Typeable (Typeable)
+
+import Model.ID (ServerId, UserId, TopicId, MessageId)
+import qualified Model.User as Ur
+import qualified Model.Topic as Tp
+import qualified Model.Message as Msg
 
 data OpType = 
     ReadTopic |
@@ -17,22 +18,24 @@ data OpType =
     SetTopicMode |
     SendMessage |
     SetBanner |
-    InviteUser
+    InviteUser |
+    GetRemoteUser
     deriving (Show, Typeable)
 
 data OpError = 
-    MeNotFound UserRef |
-    TopicNotFound TopicRef |
-    UserNotFound UserRef |
-    MemberNotFound TopicRef UserRef |
-    MessageNotFound MessageRef |
+    MeNotFound Ur.UserRef |
+    TopicNotFound Tp.TopicRef |
+    UserNotFound Ur.UserRef |
+    MemberNotFound Tp.TopicRef Ur.UserRef |
+    MessageNotFound Msg.MessageRef |
     OperationDenied OpType |
-    IdInUse TopicRef |
-    GenerateIdFailed UserRef [TopicId] |
-    GenerateMessageIdFailed TopicRef [MessageId] |
-    MessageIdInUse MessageRef |
-    LoadMessageFailed MessageRef |
-    AlreadyMember TopicRef UserRef
+    IdInUse Tp.TopicRef |
+    GenerateIdFailed Ur.UserRef [TopicId] |
+    GenerateMessageIdFailed Tp.TopicRef [MessageId] |
+    MessageIdInUse Msg.MessageRef |
+    LoadMessageFailed Msg.MessageRef |
+    AlreadyMember Tp.TopicRef Ur.UserRef |
+    NotImplemented OpType
     deriving (Show, Typeable)
 
 instance Exception OpError
@@ -46,16 +49,10 @@ throwEither f = either (throwM . f) return
 throwEitherConst :: (Exception e, MonadThrow m) => e -> Either l r -> m r
 throwEitherConst = throwEither . const
 
--- apparently this instance is no longer necessary
-{-
-instance MonadLogger m => MonadLogger (ExceptT e m) where
-    monadLoggerLog a b c d = Trans.lift $ monadLoggerLog a b c d
--}
-
 instance MonadThrow m => MonadThrow (DbPersist conn m) where
     throwM = lift . throwM
 
 type CatchDbConn m cm conn = (HasConn m cm conn, MonadCatch m, PersistBackend (DbPersist conn m))
 
 runOp :: (HasConn m cm conn, MonadCatch m) => DbPersist conn m a -> m (Either OpError a)
-runOp op = try $ runDb op
+runOp = try . runDb

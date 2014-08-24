@@ -1,22 +1,10 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances #-}
 module Api.TopicSub.Data where
 
-import Api.Utils
-import Yesod.Core
+import Yesod.Core (RenderRoute(..))
+import Yesod.Core.Dispatch (mkYesodSubData, parseRoutes)
 
-import Model.ID
-import Model.User
-import Model.Topic
-import qualified Data.Text as T
-import Database.Groundhog
-import Database.Groundhog.Generic (runDb)
-import Database.Groundhog.Sqlite
-import Database.Groundhog.Postgresql
-import Database.Groundhog.Core (ConnectionManager(..))
-import Control.Monad.Reader
-import Network.HTTP.Types
-import Data.Pool
-import Data.Text.Encoding (decodeUtf8)
+import Model.ID (ServerId, UserId, TopicId, MessageId)
 
 data TopicSub = MeTopicSub TopicId |
                 MeAboutTopicSub |

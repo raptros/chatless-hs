@@ -1,22 +1,22 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances #-}
 module Api.Root where
 
-import Api.Utils
-import Yesod.Core
-import Api.TopicSub.Data
-
-import Model.ID
-import Model.User
-import Model.Topic
+import Data.Pool (Pool)
 import qualified Data.Text as T
-import Database.Groundhog
-import Database.Groundhog.Sqlite
-import Database.Groundhog.Postgresql
+import Data.Aeson ((.=))
+
+import Database.Groundhog.Sqlite (Sqlite)
+--import Database.Groundhog.Postgresql
 import Database.Groundhog.Core (ConnectionManager(..))
-import Control.Monad (mfilter)
-import Control.Monad.Reader
-import Data.Pool
-import Safe
+
+import Yesod.Core (Yesod(..), RenderRoute(..), ErrorResponse(..))
+import Yesod.Core.Dispatch (mkYesodData, parseRoutes)
+
+import Model.ID (ServerId, UserId, TopicId, MessageId)
+
+import Api.Utils (returnErrorObject)
+import Api.TopicSub.Data (TopicSub(..))
+
 
 type CLBackend = Sqlite
 
@@ -38,16 +38,16 @@ instance Yesod Chatless where
     errorHandler (PermissionDenied why) = returnErrorObject "permission_denied" ["why"    .= why]
 
     cleanPath _ s = if corrected1 == corrected2 then Right $ map dropDash corrected1 else Left corrected2
-      where corrected1 = filterTail (not . T.null) s
+      where corrected1 = filterLast (not . T.null) s
             corrected2 = filter (not . T.null) s
             dropDash t
                 | T.all (== '-') t = T.drop 1 t
                 | otherwise = t
 
-filterTail :: (a -> Bool) -> [a] -> [a]
-filterTail _ [] = []
-filterTail p (a:[]) = if (p a) then [a] else []
-filterTail p (a:as) = a:(filterTail p as)
+filterLast :: (a -> Bool) -> [a] -> [a]
+filterLast _ [] = []
+filterLast p (a:[]) = if (p a) then [a] else []
+filterLast p (a:as) = a:(filterLast p as)
 
 
 mkYesodData "Chatless" [parseRoutes|
