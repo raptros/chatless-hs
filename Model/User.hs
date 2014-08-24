@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, QuasiQuotes, TypeFamilies, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
-module Model.User (User(..), UserRef, Key(UserCoordKey), userRefServer, userRefUser) where
+module Model.User (User(..), UserRef, Key(UserCoordKey), userRefServer, userRefUser, UserConstructor(UserConstructor)) where
 
 import Control.Applicative ((<$>), (<*>))
 import qualified Data.HashMap.Strict as H

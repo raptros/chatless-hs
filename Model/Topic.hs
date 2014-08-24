@@ -12,6 +12,8 @@ module Model.Topic (
     Key(TopicCoordKey),
     isCreator,
     fromUserRef,
+    topicRefUserRef,
+    TopicConstructor(TopicConstructor),
     topicRefId,
     initializeTopic,
     topicRefObject,

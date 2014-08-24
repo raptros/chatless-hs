@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleContexts #-}
 module Main where
 
-import Data.Aeson
 import qualified Data.Text as T
 import Yesod.Core
+import Data.Pool (Pool)
 import Database.Groundhog
 import Database.Groundhog.Sqlite
 --import Database.Groundhog.Postgresql
@@ -29,6 +29,7 @@ main = do
         localServer = ServerId "local"
     }
 
+setup :: IO (Pool CLBackend)
 setup = do
     pool <- createSqlitePool "fakery.db" 1
     runChatlessMigrate pool

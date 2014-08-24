@@ -66,7 +66,6 @@ putMemberR sid uid = do
 postMemberR :: ServerId -> UserId -> TopicHandler Value
 postMemberR sid uid = do
     caller <- lift getCaller
-    let targetUser = UserCoordKey sid uid
     tr <- readTopicRef
     invite <- requireJsonBody :: TopicHandler StorableJson
     lift (Op.inviteToTopic caller tr (UserCoordKey sid uid) invite) >>= respondOpResult
@@ -136,10 +135,10 @@ getMsgFromR :: MessageId -> Int -> TopicHandler Value
 getMsgFromR = getMsgByIdR True True
 
 getMsgByIdR :: Bool -> Bool -> MessageId -> Int -> TopicHandler Value
-getMsgByIdR forward inclusive id count = do
+getMsgByIdR forward inclusive mid count = do
     caller <- lift getCaller
     tr <- readTopicRef
-    lift (Op.getFromId forward inclusive caller tr id count) >>= respondOpResult
+    lift (Op.getFromId forward inclusive caller tr mid count) >>= respondOpResult
 
 readTopicRef :: TopicHandler TopicRef
 readTopicRef = ask >>= getTopicRef

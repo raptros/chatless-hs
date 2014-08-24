@@ -12,7 +12,7 @@ import Database.Groundhog.Core (ConnectionManager(..))
 import Yesod.Core (Yesod(..), RenderRoute(..), ErrorResponse(..))
 import Yesod.Core.Dispatch (mkYesodData, parseRoutes)
 
-import Model.ID (ServerId, UserId, TopicId, MessageId)
+import Model.ID (ServerId, UserId, TopicId)
 
 import Api.Utils (returnErrorObject)
 import Api.TopicSub.Data (TopicSub(..))

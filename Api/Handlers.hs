@@ -5,7 +5,7 @@ import Data.Aeson (Value)
 import Control.Monad.Reader (reader)
 import Yesod.Core.Json (requireJsonBody)
 
-import Model.ID (ServerId, UserId, TopicId)
+import Model.ID (UserId, TopicId)
 import Model.Topic (fromUserRef)
 
 import qualified Operations as Op
