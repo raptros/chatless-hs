@@ -9,6 +9,7 @@ import Control.Applicative ((<$>))
 import Data.Maybe (isJust)
 import Data.Either (isLeft)
 import Data.Bool (bool)
+import qualified Data.Text as T
 
 import Model.StorableJson (StorableJson)
 import Model.IDGen (genRandom)
@@ -18,18 +19,32 @@ import qualified Model.Topic as Tp
 import qualified Model.TopicMember as Tm
 import qualified Model.Message as Msg
 
-import Operations.Base (runOp, CatchDbConn, OpError(..), OpType(..), getOrThrow, throwEitherConst, (.*))
+import Utils ((.*))
+
+import Operations.Base (runOp, CatchDbConn, OpError(..), OpType(..), getOrThrow, throwEitherConst)
 import qualified Operations.Internal.Topic as T
 
 getTopic :: CatchDbConn m cm conn => Tp.TopicRef -> m (Either OpError Tp.Topic)
 getTopic = runOp . T.opGetTopic
 
-setTopicMode :: CatchDbConn m cm conn => Ur.UserRef -> Tp.TopicRef -> Tp.TopicModeUpdate -> m (Either OpError Msg.Message)
+setBanner :: CatchDbConn m cm conn => Ur.UserRef -> Tp.TopicRef -> T.Text -> m (Either OpError Msg.Message)
+setBanner caller tr banner = runOp $ do
+    T.testTopicPerm_ caller tr (const Tm.mmSetBanner) SetBanner
+    Gh.update [Tp.TopicBannerField Gh.=. banner] $ Tp.TopicCoord Gh.==. tr
+    T.opCreateMessage caller tr $ Msg.MsgBannerChanged banner
+
+setInfo :: CatchDbConn m cm conn => Ur.UserRef -> Tp.TopicRef -> StorableJson -> m (Either OpError Msg.Message)
+setInfo caller tr info = runOp $ do
+    T.testTopicPerm_ caller tr (const Tm.mmSetInfo) SetInfo
+    Gh.update [Tp.TopicInfoField Gh.=. info] $ Tp.TopicCoord Gh.==. tr
+    T.opCreateMessage caller tr $ Msg.MsgInfoChanged info
+
+setTopicMode :: CatchDbConn m cm conn => Ur.UserRef -> Tp.TopicRef -> Tp.TopicModeUpdate -> m (Either OpError Tp.TopicMode)
 setTopicMode caller tr tmu = runOp $ do
     topic <- T.testTopicPerm caller tr (const Tm.mmSetMode) SetTopicMode
-    let newMode = Tp.resolveTopicModeUpdate (Tp.topicMode topic) tmu
-    Gh.update [Tp.TopicModeField Gh.=. newMode] $ Tp.TopicCoord Gh.==. tr
-    T.opCreateMessage caller tr $ Msg.MsgTopicModeChanged newMode
+    let oldMode = Tp.topicMode topic
+        newMode = Tp.resolveTopicModeUpdateMay oldMode tmu
+    maybe (return oldMode) (T.opSetTopicMode caller tr) newMode
 
 listMembers :: (CatchDbConn m cm conn, Functor m) => Ur.UserRef -> Tp.TopicRef -> m (Either OpError [Tm.MemberPartial])
 listMembers callerRef tr = runOp $ do
@@ -43,13 +58,13 @@ getMember callerRef tr ur = runOp $ do
     res <- Gh.getBy (Tm.TargetMemberKey tr ur) 
     getOrThrow (MemberNotFound tr ur) (Tm.memberMode <$> res)
 
-setMemberMode :: (CatchDbConn m cm conn) => Ur.UserRef -> Tp.TopicRef -> Ur.UserRef -> Tm.MemberModeUpdate -> m (Either OpError Msg.Message)
+setMemberMode :: (CatchDbConn m cm conn) => Ur.UserRef -> Tp.TopicRef -> Ur.UserRef -> Tm.MemberModeUpdate -> m (Either OpError Tm.MemberMode)
 setMemberMode callerRef tr targetUser mmu = runOp $ do
     T.testTopicPerm_ callerRef tr (const Tm.mmSetMember) SetMemberMode
     targetMember <- Gh.getBy (Tm.TargetMemberKey tr targetUser) >>= getOrThrow (MemberNotFound tr targetUser)
-    let newMode = Tm.resolveMemberModeUpdate (Tm.memberMode targetMember) mmu
-    Gh.update [Tm.MemberModeField Gh.=. newMode] $ (Tm.MemberTopicField Gh.==. tr) Gh.&&. (Tm.MemberUserField Gh.==. targetUser)
-    T.opCreateMessage callerRef tr $ Msg.MsgMemberModeChanged targetUser newMode
+    let oldMode = Tm.memberMode targetMember
+        newMode = Tm.resolveMemberModeUpdateMay oldMode mmu
+    maybe (return oldMode) (T.opSetMemberMode callerRef tr targetUser) newMode
 
 createTopic :: (CatchDbConn m cm conn) => Ur.UserRef -> Tp.TopicCreate -> m (Either OpError Tp.Topic)
 createTopic ur tc = runOp $ do 

@@ -7,7 +7,9 @@ import Control.Lens.Operators ((&), (.~), (^.))
 
 import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
-import Model.Utils (dropAndLowerHead, lensName, (.~?))
+import Utils ((.*))
+
+import Model.Utils (dropAndLowerHead, lensName, runUpdateR, (^.=?), asMaybe)
 import Model.User (UserRef)
 import Model.Topic (TopicMode(..), TopicRef)
 
@@ -139,12 +141,18 @@ $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 3 } ''Member
 makeLensesWith (lensRules & lensField .~ const lensName) ''MemberModeUpdate
 
 resolveMemberModeUpdate :: MemberMode -> MemberModeUpdate -> MemberMode
-resolveMemberModeUpdate mm mmu = mm &
-    mmReadLens .~? mmu ^. mmuReadLens & 
-    mmWriteLens .~? mmu ^. mmuWriteLens & 
-    mmVoicedLens .~? mmu ^. mmuVoicedLens & 
-    mmInviteLens .~? mmu ^. mmuInviteLens & 
-    mmSetMemberLens .~? mmu ^. mmuSetMemberLens & 
-    mmSetBannerLens .~? mmu ^. mmuSetBannerLens & 
-    mmSetInfoLens .~? mmu ^. mmuSetInfoLens & 
-    mmSetModeLens .~? mmu ^. mmuSetModeLens
+resolveMemberModeUpdate mm mmu = snd $ resolveMemberModeUpdate' mm mmu
+
+resolveMemberModeUpdate' :: MemberMode -> MemberModeUpdate -> (Bool, MemberMode)
+resolveMemberModeUpdate' = runUpdateR $ do
+    mmReadLens ^.=? mmuReadLens
+    mmWriteLens ^.=? mmuWriteLens
+    mmVoicedLens ^.=? mmuVoicedLens
+    mmInviteLens ^.=? mmuInviteLens
+    mmSetMemberLens ^.=? mmuSetMemberLens
+    mmSetBannerLens ^.=? mmuSetBannerLens
+    mmSetInfoLens ^.=? mmuSetInfoLens
+    mmSetModeLens ^.=? mmuSetModeLens
+
+resolveMemberModeUpdateMay :: MemberMode -> MemberModeUpdate -> Maybe MemberMode
+resolveMemberModeUpdateMay = asMaybe .* resolveMemberModeUpdate'

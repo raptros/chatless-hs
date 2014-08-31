@@ -21,6 +21,7 @@ import Model.TopicMember (MemberMode)
 data MsgContent = 
     MsgPosted { mcBody :: StorableJson } |
     MsgBannerChanged { mcBanner :: Text } | 
+    MsgInfoChanged { mcInfo :: StorableJson } |
     MsgUserJoined { mcMemberMode :: MemberMode } | 
     MsgTopicModeChanged { mcTopicMode :: TopicMode } | 
     MsgMemberModeChanged { mcMember :: UserRef, mcMemberMode :: MemberMode } |
@@ -30,6 +31,7 @@ data MsgContent =
 msgContentFields :: MsgContent -> [Pair]
 msgContentFields (MsgPosted body) = ["body" .= body]
 msgContentFields (MsgBannerChanged banner) = ["banner" .= banner]
+msgContentFields (MsgInfoChanged info) = ["info" .= info]
 msgContentFields (MsgUserJoined mode) = ["mode" .= mode] -- note that we are using "mode"
 msgContentFields (MsgTopicModeChanged mode) = ["mode" .= mode] -- for both Topic Mode and User Mode.
 msgContentFields (MsgMemberModeChanged member mode) = ["member" .= member, "mode" .= mode]
@@ -52,11 +54,13 @@ msgContentFromObject o
                 (MsgUserJoined <$> o .: "mode") <|> 
                 typeMismatch "TopicMode or MemberMode" (o H.! "mode") -- it is known that o contains "mode".
     | hasBanner = MsgBannerChanged <$> o .: "banner"
+    | hasInfo = MsgInfoChanged <$> o .: "info"
     | hasBody = MsgPosted <$> o .: "body"
     | otherwise = typeMismatch "MsgContent" $ Object o
     where hasField = flip H.member o
           hasBody = hasField "body"
           hasBanner = hasField "banner"
+          hasInfo = hasField "info"
           hasMode = hasField "mode"
           hasJoin = hasField "join"
           hasFrom = hasField "from"

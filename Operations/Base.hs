@@ -12,24 +12,13 @@ import qualified Model.User as Ur
 import qualified Model.Topic as Tp
 import qualified Model.Message as Msg
 
-infixr 9 .*
-(.*) :: (b -> a) -> (d -> c -> b) -> d -> c -> a
-(.*) = (.) . (.)
-
-infixr 9 .**
-(.**) :: (b -> a) -> (e -> d -> c -> b) -> e -> d -> c -> a
-(.**) = (.) . (.) . (.)
-
-infixr 9 .***
-(.***) :: (b -> a) -> (f -> e -> d -> c -> b) -> f -> e -> d -> c -> a
-(.***) = (.) . (.) . (.) . (.)
-
 data OpType = 
     ReadTopic |
     SetMemberMode |
     SetTopicMode |
     SendMessage |
     SetBanner |
+    SetInfo |
     InviteUser |
     GetRemoteUser
     deriving (Show, Typeable)

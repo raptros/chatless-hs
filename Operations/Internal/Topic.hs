@@ -14,8 +14,8 @@ import qualified Model.User as Ur
 import qualified Model.Topic as Tp
 import qualified Model.TopicMember as Tm
 import qualified Model.Message as Msg
-
-import Operations.Base (OpError(..), OpType(..), getOrThrow, (.*), (.**), (.***))
+import Utils ((.*), (.**), (.***))
+import Operations.Base (OpError(..), OpType(..), getOrThrow)
 
 opGetTopic :: (Gh.PersistBackend m, MonadThrow m) => Tp.TopicRef -> m Tp.Topic
 opGetTopic tr = Gh.getBy tr >>= getOrThrow (TopicNotFound tr)
@@ -46,6 +46,12 @@ testJoinTopicPerm caller tr modeP op = do
     unless (modeP (Tp.topicMode topic) mode) $ throwM (OperationDenied op)
     return topic
 
+opSetTopicMode :: (MonadThrow m, MonadIO m, Functor m, Gh.PersistBackend m) => Ur.UserRef -> Tp.TopicRef -> Tp.TopicMode -> m Tp.TopicMode
+opSetTopicMode caller tr newMode = do
+    Gh.update [Tp.TopicModeField Gh.=. newMode] $ Tp.TopicCoord Gh.==. tr
+    opCreateMessage_ caller tr $ Msg.MsgTopicModeChanged newMode
+    return newMode
+
 -- | unitary version of testJoinTopicPerm
 testJoinTopicPerm_ :: (MonadThrow m, Functor m, MonadIO m, Gh.PersistBackend m) => Ur.UserRef -> Tp.TopicRef -> (Tp.TopicMode -> Tm.MemberMode -> Bool) -> OpType -> m ()
 testJoinTopicPerm_ = void .*** testJoinTopicPerm
@@ -62,6 +68,12 @@ opInsertMember :: (MonadThrow m, Gh.PersistBackend m) => Ur.UserRef -> Tp.TopicR
 opInsertMember ur tr mode =  Gh.getBy (Tm.TargetMemberKey tr ur) >>= maybe (insertMem newMember) (return . Left)
     where newMember = Tm.Member tr ur mode 
           insertMem m = Gh.insert m >> return (Right m)
+
+opSetMemberMode :: (MonadThrow m, MonadIO m, Functor m, Gh.PersistBackend m) => Ur.UserRef -> Tp.TopicRef -> Ur.UserRef -> Tm.MemberMode -> m Tm.MemberMode
+opSetMemberMode callerRef tr targetUser newMode = do
+    Gh.update [Tm.MemberModeField Gh.=. newMode] $ (Tm.MemberTopicField Gh.==. tr) Gh.&&. (Tm.MemberUserField Gh.==. targetUser)
+    opCreateMessage_ callerRef tr $ Msg.MsgMemberModeChanged targetUser newMode
+    return newMode
 
 opLoadHandle :: (MonadThrow m, Gh.PersistBackend m) => Msg.MsgHandle -> m Msg.Message
 opLoadHandle (Msg.MsgHandle tr mid sender k) = Gh.get k >>= maybe failure success

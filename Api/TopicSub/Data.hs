@@ -19,6 +19,8 @@ data TopicSub = MeTopicSub TopicId |
 
 mkYesodSubData "TopicSub" [parseRoutes|
 / TopicR GET
+/banner TopicBannerR GET PUT
+/info TopicInfoR GET PUT
 /mode TopicModeR GET PUT
 /member MembersR GET
 /member/user/#UserId LocalMemberR GET PUT POST

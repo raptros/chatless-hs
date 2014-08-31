@@ -1,17 +1,19 @@
 {-# LANGUAGE OverloadedStrings, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 module Api.TopicSub.Handlers where
 
+import Data.Aeson (ToJSON)
 import Control.Applicative ((<$>))
 import Control.Monad.Reader (reader, ask)
 import Control.Monad.Trans.Class (lift)
 import Data.Aeson (Value)
+import Yesod.Core (MonadHandler)
 import Yesod.Core.Handler (HandlerT)
 import Yesod.Core.Json (requireJsonBody)
 
 import Model.StorableJson (StorableJson)
 import Model.ID (ServerId, UserId, TopicId, MessageId)
-import Model.User (User, userServer, userId, userAbout, userInvite, Key(UserCoordKey))
-import Model.Topic (topicMode, TopicRef, fromUserRef, Key(TopicCoordKey))
+import Model.User (User, userServer, userId, userAbout, UserRef, userInvite, Key(UserCoordKey))
+import Model.Topic (topicBanner, topicInfo, topicMode, Topic, TopicRef, fromUserRef, Key(TopicCoordKey))
 import Model.TopicMember (MemberModeUpdate)
 
 import qualified Operations as Op
@@ -27,15 +29,33 @@ type TopicHandler a = HandlerT TopicSub Handler a
 getTopicR :: TopicHandler Value
 getTopicR = readTopicRef >>= lift . Op.getTopic >>= respondOpResult
 
+getTopicField :: ToJSON a => (Topic -> a) -> TopicHandler Value
+getTopicField f = readTopicRef >>= lift . Op.getTopic >>= respondOpResult . fmap f
+
+putTopicField :: ToJSON a => (UserRef -> TopicRef -> t -> Handler (Either Op.OpError a)) -> TopicHandler t -> TopicHandler Value
+putTopicField op mv = do
+    caller <- lift getCaller
+    tr <- readTopicRef
+    value <- mv
+    lift (op caller tr value) >>= respondOpResult
+
+getTopicBannerR :: TopicHandler Value
+getTopicBannerR = getTopicField topicBanner
+
+putTopicBannerR :: TopicHandler Value
+putTopicBannerR = putTopicField Op.setBanner requireJsonBody
+
+getTopicInfoR :: TopicHandler Value
+getTopicInfoR = getTopicField topicInfo
+
+putTopicInfoR :: TopicHandler Value
+putTopicInfoR = putTopicField Op.setInfo requireJsonBody
+
 getTopicModeR :: TopicHandler Value
-getTopicModeR = readTopicRef >>= lift . Op.getTopic >>= respondOpResult . fmap topicMode
+getTopicModeR = getTopicField topicMode
 
 putTopicModeR :: TopicHandler Value
-putTopicModeR = do
-    callerRef <- lift getCaller
-    tr <- readTopicRef
-    newMode <- requireJsonBody
-    lift (Op.setTopicMode callerRef tr newMode) >>= respondOpResult
+putTopicModeR = putTopicField Op.setTopicMode requireJsonBody
 
 pickTopicFromUser :: (User -> TopicId) -> User -> TopicRef
 pickTopicFromUser c u = TopicCoordKey (userServer u) (userId u) (c u)

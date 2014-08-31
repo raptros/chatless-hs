@@ -19,7 +19,7 @@ module Model.Topic (
     topicRefObject,
     topicRefFromObject,
     TopicModeUpdate(..),
-    resolveTopicModeUpdate
+    resolveTopicModeUpdateMay
     ) where
 
 import Control.Applicative ((<$>), (<*>))
@@ -38,7 +38,9 @@ import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 import Control.Lens.TH (makeLensesWith, lensRules, lensField)
 import Control.Lens.Operators ((&), (.~), (^.))
 
-import Model.Utils (lensName, dropAndLowerHead, (.~?))
+import Utils ((.*))
+
+import Model.Utils (lensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
 import Model.ID (ServerId, UserId, TopicId)
 import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser)
 import Model.StorableJson (StorableJson, storableEmpty)
@@ -162,10 +164,15 @@ $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''TopicM
 makeLensesWith (lensRules & lensField .~ const lensName)  ''TopicModeUpdate
 
 resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> TopicMode
-resolveTopicModeUpdate tm tmu = tm &
-    readableLens .~? tmu ^. updateReadableLens &
-    writableLens  .~? tmu ^. updateWritableLens &
-    mutedLens .~? tmu ^. updateMutedLens &
-    membersOnlyLens .~? tmu ^. updateMembersOnlyLens &
-    authenticatedOnlyLens .~? tmu ^. updateAuthenticatedOnlyLens
+resolveTopicModeUpdate tm tmu = snd $ resolveTopicModeUpdate' tm tmu
 
+resolveTopicModeUpdate' :: TopicMode -> TopicModeUpdate -> (Bool, TopicMode) 
+resolveTopicModeUpdate' = runUpdateR $ do
+    readableLens ^.=? updateReadableLens
+    writableLens ^.=? updateWritableLens
+    mutedLens ^.=? updateMutedLens
+    membersOnlyLens ^.=? updateMembersOnlyLens
+    authenticatedOnlyLens ^.=? updateAuthenticatedOnlyLens
+
+resolveTopicModeUpdateMay :: TopicMode -> TopicModeUpdate -> Maybe TopicMode
+resolveTopicModeUpdateMay = asMaybe .* resolveTopicModeUpdate'
