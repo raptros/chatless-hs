@@ -2,7 +2,6 @@
 module Main where
 
 import qualified Data.Text as T
-import Yesod.Core
 import Data.Pool (Pool)
 import Database.Groundhog
 import Database.Groundhog.Sqlite
@@ -10,25 +9,35 @@ import Database.Groundhog.Sqlite
 import Database.Groundhog.Core (ConnectionManager(..))
 import Control.Monad.Logger (NoLoggingT)
 import Control.Monad
-
 import Model.User
 import Model.Topic
 import Model.TopicMember
 import Model.Message
 import Model.ID
 import Model.StorableJson
-import Api
-import Api.Root
+--import Api
+--import Api.Root
+
+import Api.Hah
+import ServerSetup
+import System.Log.FastLogger
+
 import Data.Maybe
 
 main :: IO ()
 main = do
-    pool <- setup
-    warp 3000 $ Chatless {
-        backendConn = pool,
-        localServer = ServerId "local"
+    logger <- newStdoutLoggerSet defaultBufSize 
+    let cl = CLConfig {
+        configServerId = ServerId "local"
     }
+    runWaiApp 3000 logger (apiApplication cl)
+--    pool <- setup
+--    warp 3000 $ Chatless {
+--        backendConn = pool,
+--        localServer = ServerId "local"
+--    }
 
+{-
 setup :: IO (Pool CLBackend)
 setup = do
     pool <- createSqlitePool "fakery.db" 1
@@ -65,3 +74,5 @@ runChatlessMigrate = runDbConn $ runMigration defaultMigrationLogger $ do
     migrate (undefined :: Topic)
     migrate (undefined :: Member)
     messageMigration
+
+-}
