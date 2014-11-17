@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TupleSections #-}
 module Web.ReqRes.Response where
 
 import Control.Applicative ((<$>))
@@ -23,12 +24,6 @@ import Control.Monad.Trans.Control (MonadBaseControl, StM)
 
 import Web.ReqRes.Types
 
-respond :: (HasResponder a, MonadIO m, MonadReader a m, ToResponse v) => v -> m ResponseReceived
-respond v = do
-    r <- reader getResponder
-    liftIO . r . toResponse $ v
-
-
 data AsJson a =
         AddHeaders Status ResponseHeaders a |
         DefaultHeaders Status a |
@@ -44,11 +39,25 @@ data EmptyJson = EmptyJson Status ResponseHeaders
 instance ToResponse EmptyJson where
     toResponse (EmptyJson status hdrs) = responseJson status hdrs (object [])
 
-responseJson :: ToJSON a => Status -> ResponseHeaders -> a -> Response
-responseJson s hs a = responseLBS s ((hContentType, "application/json") : hs) (encode a)
+data EmptyBody = EmptyBody Status ResponseHeaders
 
-respondMethodNotAllowed :: (HasResponder a, MonadIO m, MonadReader a m) => [StdMethod] -> Method -> m ResponseReceived
-respondMethodNotAllowed allowed tried = respond $ EmptyJson methodNotAllowed405 [("Allowed", allowedStr)]
+instance ToResponse EmptyBody where
+    toResponse (EmptyBody status hdrs) = responseLBS status (headerCTJson : (hContentLength, "0") : hdrs) ""
+
+contentTypeJson :: BS.ByteString
+contentTypeJson = "application/json"
+
+mkContentType :: BS.ByteString -> Header
+mkContentType = (hContentType, )
+
+headerCTJson :: Header
+headerCTJson = mkContentType contentTypeJson
+
+responseJson :: ToJSON a => Status -> ResponseHeaders -> a -> Response
+responseJson s hs a = responseLBS s (headerCTJson : hs) (encode a)
+
+respondMethodNotAllowed :: MonadRespond m => [StdMethod] -> Method -> m ResponseReceived
+respondMethodNotAllowed allowed tried = respond $ EmptyBody methodNotAllowed405 [("Allowed", allowedStr)]
     where allowedStr = BS.intercalate ", " (renderStdMethod <$> allowed)
 
 responseMethodNotAllowedStd :: ToJSON a => [StdMethod] -> a -> Response

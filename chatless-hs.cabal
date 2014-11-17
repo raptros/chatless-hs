@@ -15,6 +15,7 @@ executable "chatless"
   default-language:    Haskell2010
   build-depends:
     base >=4.7 && <4.8,
+    transformers-base == 0.4.*,
     monad-control == 0.3.*,
     groundhog == 0.6.*,
     groundhog-th,
