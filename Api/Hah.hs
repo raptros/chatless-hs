@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Api.Hah where
 
-import Control.Applicative ((<$>), Applicative)
+import Control.Applicative ((<$>), Applicative, (<|>))
 import Model.ID
 import Network.Wai
 import Control.Monad.Trans.Reader
@@ -32,7 +32,12 @@ apiApplication :: CLConfig -> Application
 apiApplication conf = handleRequests (flip runReaderT conf) routeThang 
 
 routeThang :: CLApi ResponseReceived
-routeThang = getNextSegment >>= maybe apiRoot firstHandler
+routeThang = matchPath $ rootMatcher apiRoot <|> segMatcher "assemble" assembleHandler
+
+assembleHandler :: CLApi ResponseReceived
+assembleHandler = matchPath $
+    rootMatcher (respond $ DefaultHeaders notImplemented501 (object ["awaiting" .= ("stray kitten" :: T.Text)])) <|>
+    nextMatcher firstHandler
 
 apiRoot :: CLApi ResponseReceived
 apiRoot = methodRoute $ Map.empty &
@@ -40,7 +45,7 @@ apiRoot = methodRoute $ Map.empty &
         at PUT ?~ (respond $ OkJson (object ["location" .= ("there" :: T.Text)]))
 
 firstHandler :: T.Text -> CLApi ResponseReceived
-firstHandler p = withNextSegmentConsumed $ do 
+firstHandler p = do 
     ps <- getUnconsumedPath
     respond $ DefaultHeaders notImplemented501 (object ["head" .= p, "tail" .= ps])
 

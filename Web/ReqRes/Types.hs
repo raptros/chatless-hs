@@ -25,10 +25,14 @@ module Web.ReqRes.Types (
     rehUnsupportedMethod,
     rehUnmatchedPath,
     RespondT,
-    runRespondT
+    runRespondT,
+    PathMatcher(..),
+    --pathMatcher,
+    --runPathMatcher,
     ) where
 
-import Control.Applicative (Applicative, (<$>))
+import Control.Applicative
+import Control.Monad (ap)
 import Model.ID
 import Network.Wai
 import Data.Aeson
@@ -80,7 +84,7 @@ class (Functor m, MonadIO m) => MonadRespond m where
 data RequestErrorHandlers = RequestErrorHandlers {
     _rehUnsupportedMethod :: MonadRespond m => [StdMethod] -> StdMethod -> m ResponseReceived,
     _rehUnknownMethod :: MonadRespond m => [StdMethod] -> BS.ByteString -> m ResponseReceived,
-    _rehUnmatchedPath :: MonadRespond m => [T.Text] -> T.Text -> m ResponseReceived
+    _rehUnmatchedPath :: MonadRespond m => m ResponseReceived
 }
 
 makeLenses ''RequestErrorHandlers
@@ -139,10 +143,21 @@ instance MonadBaseControl b m => MonadBaseControl b (RespondT m) where
     liftBaseWith = defaultLiftBaseWith StMT
     restoreM     = defaultRestoreM   unStMT
 
-{-
-class (HasRequest a, HasResponder a) => HasRequestErrorHandlers a where
-    getRequestErrorHandlers :: a -> RequestErrorHandlers
-    modifyRequestErrorHandlers :: (RequestErrorHandlers -> RequestErrorHandlers) -> a -> a
-    replaceRequestErrorHandlers :: RequestErrorHandlers -> a -> a
-    replaceRequestErrorHandlers  = modifyRequestErrorHandlers . const
--}
+newtype PathMatcher a = PathMatcher {
+    runPathMatcher :: [T.Text] -> Maybe a
+}
+
+instance Functor PathMatcher where
+    fmap f pm = PathMatcher $ fmap f . runPathMatcher pm
+
+instance Applicative PathMatcher where
+    pure v = PathMatcher $ pure $ pure v
+    f <*> r = PathMatcher $ \l -> runPathMatcher f l <*> runPathMatcher r l
+
+instance Alternative PathMatcher where
+    empty = PathMatcher $ const Nothing
+    (<|>) l r = PathMatcher $ \segs -> runPathMatcher l segs <|> runPathMatcher r segs
+
+instance Monad PathMatcher where
+    return = pure
+    a >>= f = PathMatcher $ \l -> runPathMatcher a l >>= \v -> runPathMatcher (f v) l
