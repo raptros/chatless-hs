@@ -1,13 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Web.ReqRes.Request where
 
 import Control.Applicative
 import Network.Wai
+import qualified Control.Monad.State.Class as State
+import qualified Control.Monad.State as StateT
 import Network.HTTP.Types.Method
 import qualified Data.Text as T
 import qualified Data.Map.Lazy as Map
-import Control.Lens (at, (^.), (<&>), to)
+import Control.Lens (at, (^.), (<&>), to, view)
 import Data.Maybe (fromMaybe)
 import Control.Monad ((>=>))
 import Safe (headMay)
@@ -54,51 +59,47 @@ matchMethod dispatcher = getRequest <&> (parseMethod . requestMethod) >>= either
     selectMethod mth = fromMaybe (handleUnsupportedMethod supported (renderStdMethod mth)) $ dispatcher ^. to getMethodMatcher . at mth
 
 matchPath :: MonadRespond m => PathMatcher (m ResponseReceived) -> m ResponseReceived
-matchPath pm = getUnconsumedPath >>= (fromMaybe handleUnmatchedPath . runPathMatcher pm)
+matchPath pm = getPathZipper >>= (fromMaybe handleUnmatchedPath . runPathMatcher pm)
 
-rootMatcher :: a -> PathMatcher a
-rootMatcher a = PathMatcher $ mayWhen a . null
+path :: MonadRespond m => PathExtractor (HList l) -> HListElim l (m a) -> PathMatcher (m a)
+path extractor f = PathMatcher $ \pz -> do
+    (v, pz') <- pathExtract extractor pz
+    let action = hListUncurry f v
+    Just $ withPathZipper' pz' action
 
-segMatcher :: MonadRespond m => T.Text -> m a -> PathMatcher (m a)
-segMatcher segWant act = PathMatcher $ headMay >=> matchSeg
-    where matchSeg = mayWhen (withNextSegmentConsumed act) . (segWant ==)
+(</>) :: PathExtractor (HList l) -> PathExtractor (HList r) -> PathExtractor (HList (HAppendList l r))
+(</>) = liftA2 hAppendList
 
-nextMatcher :: MonadRespond m => (T.Text -> m a) -> PathMatcher (m a)
-nextMatcher consumer = PathMatcher $ fmap (withNextSegmentConsumed . consumer) . headMay
+pathEnd :: PathExtractor0
+pathEnd = State.get >>= maybe (return HNil) (const empty) . pzGetNext
 
-nextMayMatcher :: MonadRespond m => (T.Text -> Maybe (m a)) -> PathMatcher (m a)
-nextMayMatcher consumer = PathMatcher $ headMay >=> consumer
+singleSegExtractor :: (T.Text -> Maybe (HList a)) -> PathExtractor (HList a)
+singleSegExtractor extractor = do
+    pz <- State.get
+    res <- asPathExtractor . (pzGetNext >=> extractor) $ pz
+    State.put (pzConsumeNext pz)
+    return res
 
-segParserMatcher :: (MonadRespond m, ToResponse e) => (T.Text -> Either e a) -> (a -> m ResponseReceived) -> PathMatcher (m ResponseReceived)
-segParserMatcher parser action = nextMatcher $ either respond action . parser
+unitExtractor :: (T.Text -> Maybe ()) -> PathExtractor0
+unitExtractor = singleSegExtractor . (fmap (const HNil) .)
 
-mustParseSegMatcher :: MonadRespond m => (T.Text -> Maybe a) -> (a -> m ResponseReceived) -> PathMatcher (m ResponseReceived)
-mustParseSegMatcher parser action = nextMatcher $ \seg -> maybe (handlePathParseFailed [seg]) action (parser seg)
+predicateExtractor :: (T.Text -> Bool) -> PathExtractor0
+predicateExtractor = unitExtractor . (mayWhen () .)
 
-mayParseSegMatcher :: MonadRespond m => (T.Text -> Maybe a) -> (a -> m ResponseReceived) -> PathMatcher (m ResponseReceived)
-mayParseSegMatcher parser action = nextMayMatcher $ fmap action . parser
+seg :: T.Text -> PathExtractor0
+seg = predicateExtractor . (==)
 
-mustBePathPiece :: (MonadRespond m, PathPiece s) => (s -> m ResponseReceived) -> PathMatcher (m ResponseReceived)
-mustBePathPiece = mustParseSegMatcher fromPathPiece
+pathExtract :: PathExtractor a -> PathZipper -> Maybe (a, PathZipper)
+pathExtract extractor = StateT.runStateT (runPathExtractor extractor) 
 
-mayBePathPiece :: (MonadRespond m, PathPiece s) => (s -> m ResponseReceived) -> PathMatcher (m ResponseReceived)
-mayBePathPiece = mayParseSegMatcher fromPathPiece
+singleItemExtractor :: (T.Text -> Maybe a) -> PathExtractor1 a
+singleItemExtractor = singleSegExtractor . (fmap (hEnd . hBuild) .)
+
+value :: PathPiece a => PathExtractor1 a
+value = singleItemExtractor fromPathPiece
 
 -- utility method
 mayWhen :: a -> Bool -> Maybe a
 mayWhen v True = Just v
 mayWhen _ False = Nothing
 
-
---i am not sure yet
-{-
-newtype MatchSegs l = SegMatcher {
-    getMatchSegs :: T.Text -> Maybe l
-}
-
-data SegMatcher l 
-
-
-(</>) :: MatchSegs l -> MatchSegs r 
-
--}

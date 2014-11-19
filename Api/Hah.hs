@@ -33,12 +33,18 @@ apiApplication :: CLConfig -> Application
 apiApplication conf = handleRequests (flip runReaderT conf) routeThang 
 
 routeThang :: CLApi ResponseReceived
-routeThang = matchPath $ rootMatcher apiRoot <|> segMatcher "assemble" assembleHandler
+routeThang = matchPath $
+    path pathEnd apiRoot <|> 
+    path (seg "assemble" ) assembleHandler <|>
+    path (seg "number" </> value </> seg "string" </> value) numHandler
+    where
+    numHandler :: Integer -> T.Text -> CLApi ResponseReceived
+    numHandler num t = respond $ OkJson $ object ["text" .= t, "num" .= num]
 
 assembleHandler :: CLApi ResponseReceived
 assembleHandler = matchPath $
-    rootMatcher (respond $ DefaultHeaders notImplemented501 (object ["awaiting" .= ("stray kitten" :: T.Text)])) <|>
-    nextMatcher firstHandler
+    path pathEnd (respond $ DefaultHeaders notImplemented501 (object ["awaiting" .= ("stray kitten" :: T.Text)])) <|>
+    path value firstHandler
 
 apiRoot :: CLApi ResponseReceived
 apiRoot = matchMethod $
