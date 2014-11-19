@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Api.Hah where
 
+import Data.Monoid ((<>))
 import Control.Applicative ((<$>), Applicative, (<|>))
 import Model.ID
 import Network.Wai
@@ -40,9 +41,9 @@ assembleHandler = matchPath $
     nextMatcher firstHandler
 
 apiRoot :: CLApi ResponseReceived
-apiRoot = methodRoute $ Map.empty &
-        at GET ?~ (respond $ OkJson (object ["location" .= ("here" :: T.Text)])) &
-        at PUT ?~ (respond $ OkJson (object ["location" .= ("there" :: T.Text)]))
+apiRoot = matchMethod $
+    onGET (respond $ OkJson (object ["location" .= ("here" :: T.Text)])) <>
+    onPUT (respond $ OkJson (object ["location" .= ("there" :: T.Text)]))
 
 firstHandler :: T.Text -> CLApi ResponseReceived
 firstHandler p = do 

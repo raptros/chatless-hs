@@ -33,6 +33,7 @@ executable "chatless"
     wai >= 3.0 && < 4.0,
     wai-extra >= 3.0 && < 4.0,
     warp >= 3.0 && < 4.0,
+    HList,
     http-types,
     path-pieces,
     unordered-containers,

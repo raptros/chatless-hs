@@ -21,32 +21,24 @@ module Web.ReqRes.Types (
     getNextSegment,
     withNextSegmentConsumed,
     RequestErrorHandlers(..),
-    rehUnknownMethod,
     rehUnsupportedMethod,
     rehUnmatchedPath,
+    rehPathParseFailed,
     RespondT,
     runRespondT,
     PathMatcher(..),
+    MethodMatcher(..),
     --pathMatcher,
     --runPathMatcher,
     ) where
 
 import Control.Applicative
-import Control.Monad (ap)
-import Model.ID
+import Data.Monoid
+import Data.Function (on)
 import Network.Wai
-import Data.Aeson
-import qualified Data.ByteString as BS
-import Network.HTTP.Types.Status
-import Network.HTTP.Types.Header
 import Network.HTTP.Types.Method
 import qualified Data.Text as T
-import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Map.Lazy as Map
-import Control.Lens (at, (^.), (&), (?~))
-import Data.Either (either)
-import Data.Maybe (fromMaybe)
-import Control.Monad (liftM)
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import Control.Monad.Reader.Class
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -55,9 +47,7 @@ import Control.Monad.Trans.Control (MonadTransControl, StT, liftWith, restoreT, 
 import Control.Monad.Trans.Class
 import qualified Data.Sequence as S
 
-import Control.Lens (at, (^.), (&), (?~), (%~), makeLenses, view, to, snoc, (^?), _head)
-import Data.Either (either)
-import Data.Maybe (fromMaybe)
+import Control.Lens ((%~), makeLenses, view, snoc, (^?), _head, (&))
 import Safe (headMay, tailSafe)
 
 class ToResponse a where
@@ -82,9 +72,9 @@ class (Functor m, MonadIO m) => MonadRespond m where
     withNextSegmentConsumed :: m a -> m a
 
 data RequestErrorHandlers = RequestErrorHandlers {
-    _rehUnsupportedMethod :: MonadRespond m => [StdMethod] -> StdMethod -> m ResponseReceived,
-    _rehUnknownMethod :: MonadRespond m => [StdMethod] -> BS.ByteString -> m ResponseReceived,
-    _rehUnmatchedPath :: MonadRespond m => m ResponseReceived
+    _rehUnsupportedMethod :: MonadRespond m => [StdMethod] -> Method -> m ResponseReceived,
+    _rehUnmatchedPath :: MonadRespond m => m ResponseReceived,
+    _rehPathParseFailed :: MonadRespond m => [T.Text] -> m ResponseReceived
 }
 
 makeLenses ''RequestErrorHandlers
@@ -161,3 +151,12 @@ instance Alternative PathMatcher where
 instance Monad PathMatcher where
     return = pure
     a >>= f = PathMatcher $ \l -> runPathMatcher a l >>= \v -> runPathMatcher (f v) l
+
+newtype MethodMatcher a = MethodMatcher { 
+    getMethodMatcher :: Map.Map StdMethod a 
+}
+
+instance Monoid (MethodMatcher a) where
+    mempty = MethodMatcher mempty
+    mappend = (MethodMatcher .) . on mappend getMethodMatcher 
+

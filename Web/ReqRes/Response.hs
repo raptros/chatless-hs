@@ -1,11 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TupleSections #-}
 module Web.ReqRes.Response where
 
 import Control.Applicative ((<$>))
-import Model.ID
 import Network.Wai
 import Data.Aeson
 import qualified Data.ByteString as BS
@@ -13,14 +11,8 @@ import Network.HTTP.Types.Status
 import Network.HTTP.Types.Header
 import Network.HTTP.Types.Method
 import qualified Data.Text as T
-import Data.Text.Encoding (decodeUtf8)
-import qualified Data.Map.Lazy as Map
-import Control.Lens (at, (^.), (&), (?~))
-import Data.Either (either)
-import Data.Maybe (fromMaybe)
-import Control.Monad.Reader.Class
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Trans.Control (MonadBaseControl, StM)
+import Control.Lens (view)
+import Control.Monad (join)
 
 import Web.ReqRes.Types
 
@@ -56,14 +48,25 @@ headerCTJson = mkContentType contentTypeJson
 responseJson :: ToJSON a => Status -> ResponseHeaders -> a -> Response
 responseJson s hs a = responseLBS s (headerCTJson : hs) (encode a)
 
-respondMethodNotAllowed :: MonadRespond m => [StdMethod] -> Method -> m ResponseReceived
-respondMethodNotAllowed allowed tried = respond $ EmptyBody methodNotAllowed405 [("Allowed", allowedStr)]
+defaultRequestErrorHandlers :: RequestErrorHandlers
+defaultRequestErrorHandlers = RequestErrorHandlers defaultUnsupportedMethodHandler defaultUnmatchedPathHandler defaultPathParseFailedHandler
+
+defaultUnsupportedMethodHandler :: MonadRespond m => [StdMethod] -> Method -> m ResponseReceived
+defaultUnsupportedMethodHandler allowed _ = respond $ EmptyBody methodNotAllowed405 [("Allowed", allowedStr)]
     where allowedStr = BS.intercalate ", " (renderStdMethod <$> allowed)
 
-responseMethodNotAllowedStd :: ToJSON a => [StdMethod] -> a -> Response
-responseMethodNotAllowedStd = responseMethodNotAllowed . fmap renderStdMethod
+defaultUnmatchedPathHandler :: MonadRespond m => m ResponseReceived
+defaultUnmatchedPathHandler = respond $ EmptyBody status404 []
 
-responseMethodNotAllowed :: ToJSON a => [Method] -> a -> Response
-responseMethodNotAllowed allowed = responseJson methodNotAllowed405 [("Allowed", allowedStr)]
-    where allowedStr = BS.intercalate ", " allowed
+defaultPathParseFailedHandler :: MonadRespond m => [T.Text] -> m ResponseReceived
+defaultPathParseFailedHandler failedOn = respond $ DefaultHeaders badRequest400 ["badPath" .= failedOn]
+
+handleUnsupportedMethod :: MonadRespond m => [StdMethod] -> Method -> m ResponseReceived
+handleUnsupportedMethod supported unsupported = getREH (view rehUnsupportedMethod) >>= \handler -> handler supported unsupported
+
+handleUnmatchedPath :: MonadRespond m => m ResponseReceived
+handleUnmatchedPath = join (getREH (view rehUnmatchedPath))
+
+handlePathParseFailed :: MonadRespond m => [T.Text] -> m ResponseReceived
+handlePathParseFailed parts = getREH (view rehPathParseFailed) >>= \handler -> handler parts
 
