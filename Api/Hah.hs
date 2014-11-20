@@ -1,7 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TemplateHaskell #-}
 module Api.Hah where
 
 import Data.Monoid ((<>))
@@ -30,7 +28,7 @@ data CLConfig = CLConfig {
 type CLApi = RespondT (ReaderT CLConfig IO)
 
 apiApplication :: CLConfig -> Application
-apiApplication conf = handleRequests (flip runReaderT conf) routeThang 
+apiApplication conf = handleRequests (`runReaderT` conf) routeThang 
 
 routeThang :: CLApi ResponseReceived
 routeThang = matchPath $

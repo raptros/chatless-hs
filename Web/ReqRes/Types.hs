@@ -9,47 +9,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Web.ReqRes.Types (
-    ToResponse,
-    toResponse,
-    PathZipper,
-    mkPathZipper,
-    pzGetNext,
-    pzConsumeNext,
-    pzUnconsumed,
-    Responder,
-    MonadRespond, 
-    respond,
-    getRequest,
-    getREHs, 
-    getREH,
-    withREHs,
-    getPathZipper,
-    withPathZipper,
-    withPathZipper',
-    getConsumedPath,
-    getUnconsumedPath,
-    getNextSegment,
-    withNextSegmentConsumed,
-    RequestErrorHandlers(..),
-    rehUnsupportedMethod,
-    rehUnmatchedPath,
-    rehPathParseFailed,
-    RespondT,
-    runRespondT,
-    PathMatcher(..),
-    MethodMatcher(..),
-    HListElim,
-    hListUncurry,
-    PathExtractor(..),
-    HList0,
-    HList1,
-    PathExtractor0,
-    PathExtractor1,
-    asPathExtractor,
-    --pathMatcher,
-    --runPathMatcher,
-    ) where
+module Web.ReqRes.Types where
 
 import Control.Applicative
 import Data.Monoid
@@ -69,7 +29,7 @@ import Control.Monad.Trans.Class
 import Data.HList
 import qualified Data.Sequence as S
 
-import Control.Lens ((%~), makeLenses, view, snoc, (^?), _head, (&), (.~))
+import Control.Lens ((%~), makeLenses, snoc, (%=), uses, view)
 import Safe (headMay, tailSafe)
 
 class ToResponse a where
@@ -80,43 +40,61 @@ instance ToResponse Response where
 
 type Responder = Response -> IO ResponseReceived
 
-data PathZipper = PathZipper {
-    _pzConsumed :: S.Seq T.Text,
-    _pzUnconsumed :: [T.Text]
+data PathConsumer = PathConsumer {
+    _pcConsumed :: S.Seq T.Text,
+    _pcUnconsumed :: [T.Text]
 } deriving (Eq, Show)
 
-makeLenses ''PathZipper
+makeLenses ''PathConsumer
 
-mkPathZipper :: [T.Text] -> PathZipper
-mkPathZipper path = PathZipper S.empty path
+-- | build a path consumer starting with nothing consumed
+mkPathConsumer :: [T.Text] -> PathConsumer
+mkPathConsumer = PathConsumer S.empty 
 
-pzGetNext :: PathZipper -> Maybe T.Text
-pzGetNext pz = headMay (_pzUnconsumed pz) 
+-- | get the next path element
+pcGetNext :: PathConsumer -> Maybe T.Text
+pcGetNext = headMay . _pcUnconsumed
 
-pzConsumeNext :: PathZipper -> PathZipper
-pzConsumeNext prev =  prev &
-    pzConsumed %~ maybe id (flip snoc) (prev ^? pzUnconsumed . _head) &
-    pzUnconsumed %~ tailSafe
+-- | move forward in the path
+pcConsumeNext :: PathConsumer -> PathConsumer
+pcConsumeNext = execState $ do
+    next <- uses pcUnconsumed headMay
+    pcConsumed %= maybe id (flip snoc) next
+    pcUnconsumed %= tailSafe
 
+-- | this class is the api for building your handler
 class (Functor m, MonadIO m) => MonadRespond m where
+    -- | respond.
     respond :: ToResponse v => v -> m ResponseReceived
+    -- | get out the request
     getRequest :: m Request
+    -- | get the handlers
     getREHs :: m RequestErrorHandlers
+    -- | get something out of the handlers
     getREH :: (RequestErrorHandlers -> a) -> m a
     getREH f = f <$> getREHs
+    -- | use a function of the current request handlers for the inner
+    -- action
     withREHs :: (RequestErrorHandlers -> RequestErrorHandlers) -> m a -> m a
-    getPathZipper :: m PathZipper
-    withPathZipper :: (PathZipper -> PathZipper) -> m a -> m a
-    withPathZipper' :: PathZipper -> m a -> m a
-    withPathZipper' = withPathZipper . const
+    -- | get the path consumer as it stands here
+    getPath :: m PathConsumer
+    -- | use a function of the current path consumer
+    withPath :: (PathConsumer -> PathConsumer) -> m a -> m a
+    -- | use this path
+    usePath :: PathConsumer -> m a -> m a
+    usePath = withPath . const
+    -- | get the current consumed path
     getConsumedPath :: m (S.Seq T.Text)
-    getConsumedPath = (view pzConsumed) <$> getPathZipper
+    getConsumedPath = _pcConsumed <$> getPath
+    -- | get current unconsumed path
     getUnconsumedPath :: m [T.Text]
-    getUnconsumedPath = (view pzUnconsumed) <$> getPathZipper
+    getUnconsumedPath = _pcUnconsumed <$> getPath
+    -- | get the next segment if there are any more segments
     getNextSegment :: m (Maybe T.Text)
     getNextSegment = headMay <$> getUnconsumedPath
+    -- | consume the next segment
     withNextSegmentConsumed :: m a -> m a
-    withNextSegmentConsumed = withPathZipper pzConsumeNext
+    withNextSegmentConsumed = withPath pcConsumeNext
 
 data RequestErrorHandlers = RequestErrorHandlers {
     _rehUnsupportedMethod :: MonadRespond m => [StdMethod] -> Method -> m ResponseReceived,
@@ -130,24 +108,26 @@ data RespondData = RespondData {
     _rehs :: RequestErrorHandlers,
     _request :: Request,
     _responder :: Responder,
-    _pathZipper :: PathZipper
+    _pathConsumer :: PathConsumer
 }
 
 makeLenses ''RespondData
 
 -- | RespondT is a monad transformer that can implement MonadRespond
-newtype RespondT m a = RespondT { unRespondT :: ReaderT RespondData m a } deriving (Functor, Applicative, Monad, MonadReader RespondData)
+newtype RespondT m a = RespondT { 
+    unRespondT :: ReaderT RespondData m a 
+} deriving (Functor, Applicative, Monad, MonadReader RespondData)
 
 instance (Functor m, MonadIO m) => MonadRespond (RespondT m) where
     respond v = view responder >>= \r -> liftIO . r . toResponse $ v
     getRequest = view request
     getREHs = view rehs
     withREHs handlers = local (rehs %~ handlers)
-    getPathZipper = view pathZipper
-    withPathZipper f = local (pathZipper %~ f) 
+    getPath = view pathConsumer
+    withPath f = local (pathConsumer %~ f) 
 
 runRespondT :: RespondT m a -> RequestErrorHandlers -> Request -> Responder -> m a
-runRespondT (RespondT act) handlers req res = runReaderT act $ RespondData handlers req res (mkPathZipper $ pathInfo req)
+runRespondT (RespondT act) handlers req res = runReaderT act $ RespondData handlers req res (mkPathConsumer $ pathInfo req)
 
 instance MonadTrans RespondT where
     lift act = RespondT $ lift act
@@ -172,9 +152,10 @@ instance MonadBaseControl b m => MonadBaseControl b (RespondT m) where
     liftBaseWith = defaultLiftBaseWith StMT
     restoreM     = defaultRestoreM   unStMT
 
+-- | the PathMatcher makes it easy to provide actions for different paths.
 newtype PathMatcher a = PathMatcher {
-    runPathMatcher :: PathZipper  -> Maybe a
-}
+    runPathMatcher :: PathConsumer -> Maybe a
+} 
 
 instance Functor PathMatcher where
     fmap f pm = PathMatcher $ fmap f . runPathMatcher pm
@@ -185,7 +166,7 @@ instance Applicative PathMatcher where
 
 instance Alternative PathMatcher where
     empty = PathMatcher $ const Nothing
-    (<|>) l r = PathMatcher $ (<|>) <$> runPathMatcher l <*> runPathMatcher r
+    l <|> r = PathMatcher $ (<|>) <$> runPathMatcher l <*> runPathMatcher r
 
 instance Monad PathMatcher where
     return = pure
@@ -208,8 +189,8 @@ hListUncurry f HNil = f
 hListUncurry f (HCons x xs) = hListUncurry (f x) xs
 
 newtype PathExtractor l = PathExtractor {
-    runPathExtractor :: StateT PathZipper Maybe l
-} deriving (Functor, Applicative, Monad, Alternative, MonadState PathZipper, MonadPlus)
+    runPathExtractor :: StateT PathConsumer Maybe l
+} deriving (Functor, Applicative, Monad, Alternative, MonadState PathConsumer, MonadPlus)
 
 asPathExtractor :: Maybe a -> PathExtractor a
 asPathExtractor = PathExtractor . lift

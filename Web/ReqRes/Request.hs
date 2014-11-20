@@ -12,10 +12,8 @@ import qualified Control.Monad.State as StateT
 import Network.HTTP.Types.Method
 import qualified Data.Text as T
 import qualified Data.Map.Lazy as Map
-import Control.Lens (at, (^.), (<&>), to, view)
+import Control.Lens (at, (^.), (<&>), to)
 import Data.Maybe (fromMaybe)
-import Control.Monad ((>=>))
-import Safe (headMay)
 import Web.PathPieces
 import Data.HList
 
@@ -59,25 +57,25 @@ matchMethod dispatcher = getRequest <&> (parseMethod . requestMethod) >>= either
     selectMethod mth = fromMaybe (handleUnsupportedMethod supported (renderStdMethod mth)) $ dispatcher ^. to getMethodMatcher . at mth
 
 matchPath :: MonadRespond m => PathMatcher (m ResponseReceived) -> m ResponseReceived
-matchPath pm = getPathZipper >>= (fromMaybe handleUnmatchedPath . runPathMatcher pm)
+matchPath pm = getPath >>= (fromMaybe handleUnmatchedPath . runPathMatcher pm)
 
 path :: MonadRespond m => PathExtractor (HList l) -> HListElim l (m a) -> PathMatcher (m a)
-path extractor f = PathMatcher $ \pz -> do
-    (v, pz') <- pathExtract extractor pz
+path extractor f = PathMatcher $ \p -> do
+    (v, p') <- pathExtract extractor p
     let action = hListUncurry f v
-    Just $ withPathZipper' pz' action
+    Just $ usePath p' action
 
 (</>) :: PathExtractor (HList l) -> PathExtractor (HList r) -> PathExtractor (HList (HAppendList l r))
 (</>) = liftA2 hAppendList
 
 pathEnd :: PathExtractor0
-pathEnd = State.get >>= maybe (return HNil) (const empty) . pzGetNext
+pathEnd = State.get >>= maybe (return HNil) (const empty) . pcGetNext
 
 singleSegExtractor :: (T.Text -> Maybe (HList a)) -> PathExtractor (HList a)
 singleSegExtractor extractor = do
     pz <- State.get
-    res <- asPathExtractor . (pzGetNext >=> extractor) $ pz
-    State.put (pzConsumeNext pz)
+    res <- asPathExtractor . (pcGetNext >=> extractor) $ pz
+    State.put (pcConsumeNext pz)
     return res
 
 unitExtractor :: (T.Text -> Maybe ()) -> PathExtractor0
@@ -89,7 +87,7 @@ predicateExtractor = unitExtractor . (mayWhen () .)
 seg :: T.Text -> PathExtractor0
 seg = predicateExtractor . (==)
 
-pathExtract :: PathExtractor a -> PathZipper -> Maybe (a, PathZipper)
+pathExtract :: PathExtractor a -> PathConsumer -> Maybe (a, PathConsumer)
 pathExtract extractor = StateT.runStateT (runPathExtractor extractor) 
 
 singleItemExtractor :: (T.Text -> Maybe a) -> PathExtractor1 a
