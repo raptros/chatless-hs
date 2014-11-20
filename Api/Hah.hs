@@ -19,7 +19,7 @@ import Control.Monad.Reader.Class (MonadReader)
 import Control.Lens (at, (^.), (&), (?~), (%~), makeLenses, view, to)
 import Data.Either (either)
 import Data.Maybe (fromMaybe)
-import Web.ReqRes
+import Web.Respond
 
 data CLConfig = CLConfig {
     configServerId  :: ServerId
@@ -28,7 +28,7 @@ data CLConfig = CLConfig {
 type CLApi = RespondT (ReaderT CLConfig IO)
 
 apiApplication :: CLConfig -> Application
-apiApplication conf = handleRequests (`runReaderT` conf) routeThang 
+apiApplication conf = respondAppDefault (`runReaderT` conf) routeThang 
 
 routeThang :: CLApi ResponseReceived
 routeThang = matchPath $

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
-module Web.ReqRes.Response where
+module Web.Respond.Response where
 
 import Control.Applicative ((<$>))
 import Network.Wai
@@ -14,7 +14,7 @@ import qualified Data.Text as T
 import Control.Lens (view)
 import Control.Monad (join)
 
-import Web.ReqRes.Types
+import Web.Respond.Types
 
 data AsJson a =
         AddHeaders Status ResponseHeaders a |

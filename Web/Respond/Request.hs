@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Web.ReqRes.Request where
+module Web.Respond.Request where
 
 import Control.Applicative
 import Network.Wai
@@ -17,8 +17,8 @@ import Data.Maybe (fromMaybe)
 import Web.PathPieces
 import Data.HList
 
-import Web.ReqRes.Types
-import Web.ReqRes.Response
+import Web.Respond.Types
+import Web.Respond.Response
 
 onMethod :: StdMethod -> a -> MethodMatcher a
 onMethod = (MethodMatcher .) . Map.singleton

@@ -9,7 +9,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Web.ReqRes.Types where
+module Web.Respond.Types where
 
 import Control.Applicative
 import Data.Monoid
