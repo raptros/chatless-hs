@@ -23,7 +23,7 @@ prepApp logger app = ($ app) <$> mkMiddleware logger
 mkMiddleware :: LoggerSet -> IO Middleware
 mkMiddleware logger = (\rlmw -> rlmw . middlewares) <$> logMiddleware
     where
-    middlewares = {- Autohead.autohead . -} Gzip.gzip Def.def . Rewrite.rewritePure (const . pathCleaner)
+    middlewares = {- Autohead.autohead . -} Gzip.gzip Def.def {-. Rewrite.rewritePure (const . pathCleaner) -}
     logMiddleware = RequestLogger.mkRequestLogger $ Def.def {
         RequestLogger.outputFormat = RequestLogger.Apache RequestLogger.FromSocket,
         RequestLogger.destination = RequestLogger.Logger logger

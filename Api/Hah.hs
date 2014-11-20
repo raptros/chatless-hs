@@ -32,16 +32,16 @@ apiApplication conf = respondAppDefault (`runReaderT` conf) routeThang
 
 routeThang :: CLApi ResponseReceived
 routeThang = matchPath $
-    path pathEnd apiRoot <|> 
+    path endOrSlash apiRoot <|> 
     path (seg "assemble" ) assembleHandler <|>
-    path (seg "number" </> value </> seg "string" </> value) numHandler
+    path (seg "number" </> value </> seg "string" </> value </> endOrSlash) numHandler
     where
     numHandler :: Integer -> T.Text -> CLApi ResponseReceived
     numHandler num t = respond $ OkJson $ object ["text" .= t, "num" .= num]
 
 assembleHandler :: CLApi ResponseReceived
 assembleHandler = matchPath $
-    path pathEnd (respond $ DefaultHeaders notImplemented501 (object ["awaiting" .= ("stray kitten" :: T.Text)])) <|>
+    path endOrSlash (respond $ DefaultHeaders notImplemented501 (object ["awaiting" .= ("stray kitten" :: T.Text)])) <|>
     path value firstHandler
 
 apiRoot :: CLApi ResponseReceived
