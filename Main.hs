@@ -6,6 +6,9 @@ import Data.Pool (Pool)
 import Database.Groundhog
 import Database.Groundhog.Sqlite
 --import Database.Groundhog.Postgresql
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Base (MonadBase, liftBase, liftBaseDefault)
+import Control.Monad.Trans.Control (MonadTransControl, StT, liftWith, restoreT, defaultLiftWith, defaultRestoreT, MonadBaseControl, StM, liftBaseWith, defaultLiftBaseWith, restoreM, defaultRestoreM, ComposeSt)
 import Database.Groundhog.Core (ConnectionManager(..))
 import Control.Monad.Logger (NoLoggingT)
 import Control.Monad
@@ -18,6 +21,7 @@ import Model.StorableJson
 --import Api
 --import Api.Root
 
+import Api.Config
 import Api.Monad
 import Api.Hah
 import Web.DefaultRespondServer
@@ -28,18 +32,14 @@ import Data.Maybe
 main :: IO ()
 main = do
     logger <- newStdoutLoggerSet defaultBufSize 
+    pool <- setup
     let cl = CLConfig {
-        _clcServerId = ServerId "local"
+        _clcServerId = ServerId "local",
+        _clcDb = pool
     }
     runWaiApp 3000 logger (apiApplication cl)
---    pool <- setup
---    warp 3000 $ Chatless {
---        backendConn = pool,
---        localServer = ServerId "local"
---    }
 
-{-
-setup :: IO (Pool CLBackend)
+setup :: IO (Pool CLDb)
 setup = do
     pool <- createSqlitePool "fakery.db" 1
     runChatlessMigrate pool
@@ -75,5 +75,3 @@ runChatlessMigrate = runDbConn $ runMigration defaultMigrationLogger $ do
     migrate (undefined :: Topic)
     migrate (undefined :: Member)
     messageMigration
-
--}
