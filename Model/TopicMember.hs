@@ -9,7 +9,7 @@ import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
 import Utils ((.*))
 
-import Model.Utils (dropAndLowerHead, lensName, runUpdateR, (^.=?), asMaybe)
+import Model.Utils (dropAndLowerHead, runUpdateR, (^.=?), asMaybe, mkLensName)
 import Model.User (UserRef)
 import Model.Topic (TopicMode(..), TopicRef)
 
@@ -27,7 +27,7 @@ data MemberMode = MemberMode {
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 2 } ''MemberMode)
 
-makeLensesWith (lensRules & lensField .~ const lensName) ''MemberMode
+makeLensesWith (lensRules & lensField .~ mkLensName) ''MemberMode
 
 modeCreator :: MemberMode
 modeCreator = MemberMode {
@@ -138,7 +138,7 @@ defaultMMU = MemberModeUpdate Nothing Nothing Nothing Nothing Nothing Nothing No
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 3 } ''MemberModeUpdate)
 
-makeLensesWith (lensRules & lensField .~ const lensName) ''MemberModeUpdate
+makeLensesWith (lensRules & lensField .~ mkLensName) ''MemberModeUpdate
 
 resolveMemberModeUpdate :: MemberMode -> MemberModeUpdate -> MemberMode
 resolveMemberModeUpdate mm mmu = snd $ resolveMemberModeUpdate' mm mmu

@@ -40,7 +40,7 @@ import Control.Lens.Operators ((&), (.~), (^.))
 
 import Utils ((.*))
 
-import Model.Utils (lensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
+import Model.Utils (mkLensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
 import Model.ID (ServerId, UserId, TopicId)
 import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser)
 import Model.StorableJson (StorableJson, storableEmpty)
@@ -65,7 +65,7 @@ inviteTopicMode = TopicMode False True False True True
 
 $(deriveJSON defaultOptions ''TopicMode)
 
-makeLensesWith (lensRules & lensField .~ const lensName) ''TopicMode
+makeLensesWith (lensRules & lensField .~ mkLensName) ''TopicMode
 
 data TopicCreate = TopicCreate {
     createId :: Maybe TopicId,
@@ -161,7 +161,7 @@ data TopicModeUpdate = TopicModeUpdate {
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''TopicModeUpdate)
 
-makeLensesWith (lensRules & lensField .~ const lensName)  ''TopicModeUpdate
+makeLensesWith (lensRules & lensField .~ mkLensName)  ''TopicModeUpdate
 
 resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> TopicMode
 resolveTopicModeUpdate tm tmu = snd $ resolveTopicModeUpdate' tm tmu

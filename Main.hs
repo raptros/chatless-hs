@@ -18,8 +18,9 @@ import Model.StorableJson
 --import Api
 --import Api.Root
 
+import Api.Monad
 import Api.Hah
-import ServerSetup
+import Web.DefaultRespondServer
 import System.Log.FastLogger
 
 import Data.Maybe
@@ -28,7 +29,7 @@ main :: IO ()
 main = do
     logger <- newStdoutLoggerSet defaultBufSize 
     let cl = CLConfig {
-        configServerId = ServerId "local"
+        _clcServerId = ServerId "local"
     }
     runWaiApp 3000 logger (apiApplication cl)
 --    pool <- setup

@@ -21,14 +21,12 @@ import Data.Either (either)
 import Data.Maybe (fromMaybe)
 import Web.Respond
 
-data CLConfig = CLConfig {
-    configServerId  :: ServerId
-}
+import Api.Monad
 
-type CLApi = RespondT (ReaderT CLConfig IO)
+type CLApi = RespondT (ChatlessT IO)
 
 apiApplication :: CLConfig -> Application
-apiApplication conf = respondAppDefault (`runReaderT` conf) routeThang 
+apiApplication conf = respondAppDefault (`runChatlessT` conf) routeThang 
 
 routeThang :: CLApi ResponseReceived
 routeThang = matchPath $
@@ -45,9 +43,11 @@ assembleHandler = matchPath $
     path value firstHandler
 
 apiRoot :: CLApi ResponseReceived
-apiRoot = matchMethod $
-    onGET (respond $ OkJson (object ["location" .= ("here" :: T.Text)])) <>
-    onPUT (respond $ OkJson (object ["location" .= ("there" :: T.Text)]))
+apiRoot = do 
+    sid <- getServerId
+    matchMethod $
+        onGET (respond $ OkJson (object ["location" .= ("here" :: T.Text), "server" .= sid])) <>
+        onPUT (respond $ OkJson (object ["location" .= ("there" :: T.Text)]))
 
 firstHandler :: T.Text -> CLApi ResponseReceived
 firstHandler p = do 
