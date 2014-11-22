@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs, MultiParamTypeClasses, FunctionalDependencies #-}
 module Model.Topic (
     TopicMode(..),
+    getRefFromTopic,
     defaultTopicMode,
     aboutTopicMode,
     inviteTopicMode,
@@ -12,11 +13,15 @@ module Model.Topic (
     Key(TopicCoordKey),
     isCreator,
     fromUserRef,
+    userTopicRef,
+    userAboutTopicRef,
+    userInviteTopicRef,
     topicRefUserRef,
     TopicConstructor(TopicConstructor),
     topicRefId,
     initializeTopic,
     topicRefObject,
+    CensoredTopic(..),
     topicRefFromObject,
     TopicModeUpdate(..),
     resolveTopicModeUpdateMay
@@ -28,7 +33,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as H
 
-import Data.Aeson (ToJSON, FromJSON, (.=), (.:), toJSON, parseJSON, Object, Value(..), withObject)
+import Data.Aeson (ToJSON, FromJSON, (.=), (.:), toJSON, parseJSON, Object, Value(..), withObject, object)
 import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
 import Data.Aeson.Types (Parser)
 
@@ -36,13 +41,13 @@ import Database.Groundhog.Core (Key, Field, Unique)
 import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
 import Control.Lens.TH (makeLensesWith, lensRules, lensField)
-import Control.Lens.Operators ((&), (.~), (^.))
+import Control.Lens.Operators ((&), (.~))
 
 import Utils ((.*))
 
 import Model.Utils (mkLensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
 import Model.ID (ServerId, UserId, TopicId)
-import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser)
+import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, userInvite, User)
 import Model.StorableJson (StorableJson, storableEmpty)
 
 
@@ -138,8 +143,20 @@ instance FromJSON (Key Topic (Unique TopicCoord)) where
 fromUserRef :: TopicId -> UserRef -> TopicRef
 fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid
 
+userTopicRef :: User -> TopicId -> TopicRef
+userTopicRef user = TopicCoordKey (userServer user) (userId user) 
+
+userAboutTopicRef :: User -> TopicRef
+userAboutTopicRef user = userTopicRef user (userAbout user)
+
+userInviteTopicRef :: User -> TopicRef
+userInviteTopicRef user = userTopicRef user (userInvite user)
+
 isCreator :: UserRef -> Topic -> Bool
 isCreator (UserCoordKey sid uid) t = (sid == topicServer t) && (uid == topicUser t)
+
+getRefFromTopic :: Topic -> TopicRef
+getRefFromTopic = TopicCoordKey <$> topicServer <*> topicUser <*> topicId
 
 initializeTopic :: UserRef -> TopicId -> TopicCreate -> Topic
 initializeTopic caller tid (TopicCreate _ mBanner mInfo mMode) = Topic {
@@ -163,8 +180,8 @@ $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''TopicM
 
 makeLensesWith (lensRules & lensField .~ mkLensName)  ''TopicModeUpdate
 
-resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> TopicMode
-resolveTopicModeUpdate tm tmu = snd $ resolveTopicModeUpdate' tm tmu
+--resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> TopicMode
+--resolveTopicModeUpdate tm tmu = snd $ resolveTopicModeUpdate' tm tmu
 
 resolveTopicModeUpdate' :: TopicMode -> TopicModeUpdate -> (Bool, TopicMode) 
 resolveTopicModeUpdate' = runUpdateR $ do
@@ -176,3 +193,8 @@ resolveTopicModeUpdate' = runUpdateR $ do
 
 resolveTopicModeUpdateMay :: TopicMode -> TopicModeUpdate -> Maybe TopicMode
 resolveTopicModeUpdateMay = asMaybe .* resolveTopicModeUpdate'
+
+newtype CensoredTopic = CensoredTopic Topic
+
+instance ToJSON CensoredTopic where
+    toJSON (CensoredTopic topic) = object ["server" .= topicServer topic, "user" .= topicUser topic, "id" .= topicId topic]

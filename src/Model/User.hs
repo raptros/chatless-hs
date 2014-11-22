@@ -1,5 +1,13 @@
 {-# LANGUAGE FlexibleInstances, QuasiQuotes, TypeFamilies, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
-module Model.User (User(..), UserRef, Key(UserCoordKey), userRefServer, userRefUser, UserConstructor(UserConstructor)) where
+module Model.User (
+                  User(..),
+                  UserRef,
+                  Key(UserCoordKey),
+                  getRefFromUser,
+                  userRefServer,
+                  userRefUser,
+                  UserConstructor(UserConstructor)
+                  ) where
 
 import Control.Applicative ((<$>), (<*>))
 import qualified Data.HashMap.Strict as H
@@ -46,6 +54,9 @@ mkPersist defaultCodegenConfig [groundhog|
 |]
 
 type UserRef = (Key User (Unique UserCoord))
+
+getRefFromUser :: User -> UserRef
+getRefFromUser = UserCoordKey <$> userServer <*> userId
 
 userRefServer :: UserRef -> ServerId
 userRefServer (UserCoordKey s _) = s

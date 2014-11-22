@@ -3,7 +3,7 @@ module Model.TopicMember where
 
 import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
 import Control.Lens.TH (makeLensesWith, lensRules, lensField)
-import Control.Lens.Operators ((&), (.~), (^.))
+import Control.Lens.Operators ((&), (.~))
 
 import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
@@ -64,6 +64,9 @@ invitedMode tm = modeDeny { mmRead = True, mmWrite = writable tm }
 
 canSend :: TopicMode -> MemberMode -> Bool
 canSend tm mm = mmWrite mm && (not (muted tm) || mmVoiced mm)
+
+canSetBanner :: TopicMode -> MemberMode -> Bool
+canSetBanner = const mmSetBanner
 
 data Member = Member {
     memberTopic :: TopicRef,

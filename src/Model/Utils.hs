@@ -1,4 +1,7 @@
-{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, RankNTypes, TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-} 
+{-# LANGUAGE TupleSections #-}
 module Model.Utils where
 
 import qualified Data.Char as C
@@ -9,8 +12,7 @@ import Language.Haskell.TH (Name, mkName, nameBase)
 import Control.Applicative ((<*>))
 import Control.Monad.State (State, execState, StateT, execStateT)
 import Control.Monad.State.Class (MonadState)
-import Control.Monad.Reader (MonadReader, ask, ReaderT, runReaderT, Reader, runReader)
-
+import Control.Monad.Reader (MonadReader, Reader, runReader)
 import Control.Lens.Setter (over, ASetter, (.=))
 import Control.Lens.Getter (use, view)
 import Control.Lens.Lens (Lens')
@@ -53,7 +55,7 @@ infixr 4 .=?
 (.=?) = resolveUpdate
 
 runUpdate :: a -> State (Bool, a) () -> (Bool, a)
-runUpdate init = flip execState (False, init)
+runUpdate = flip execState . (False ,)
 
 resolveUpdateR :: (MonadState (Bool, s) m, Eq b, MonadReader t m) => Lens' s b -> Lens' t (Maybe b) -> m ()
 resolveUpdateR l lv = view lv >>= resolveUpdate l

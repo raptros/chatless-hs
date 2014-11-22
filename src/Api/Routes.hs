@@ -2,34 +2,24 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Api.Routes where
 
-import Data.Monoid ((<>))
-import Control.Applicative ((<$>), Applicative, (<|>))
+import Control.Applicative ((<$>), (<|>))
 import Model.ID
 import Model.User
 import Model.Topic
+import Model.TopicMember
 import Network.Wai
+import Data.Monoid ((<>))
 import Control.Monad ((>=>))
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.Reader
 import Data.Aeson
-import qualified Data.ByteString as BS
 import Network.HTTP.Types.Status
-import Network.HTTP.Types.Header
-import Network.HTTP.Types.Method
-import qualified Data.Text as T
-import Data.Text.Encoding (decodeUtf8)
-import qualified Data.Map.Lazy as Map
-import Control.Monad.Reader.Class (MonadReader)
-import Control.Lens (at, (^.), (&), (?~), (%~), makeLenses, view, to, (<&>))
-import Data.Either (either)
-import Data.Maybe (fromMaybe)
+import Control.Lens ((<&>))
 import Web.Respond
 import Web.Respond.HListUtils
-import Database.Groundhog
-import Database.Groundhog.Generic
 
 import Api.Config
 import Api.Monad
+import Api.Queries
+import Api.Auth
 
 type CLApi = RespondT Chatless
 
@@ -38,7 +28,7 @@ apiApplication conf = respondAppDefault (`runChatless` conf) api
 
 api :: CLApi ResponseReceived
 api = matchPath $
-    path endOrSlash apiRoot <|> 
+    pathEndOrSlash apiRoot <|> 
     path (seg "me") meRoutes <|>
     path localUserExtractor (getLocalUserRef >=> localUserRoutes) <|>
     path anyUserExtractor anyUserRoutes
@@ -49,38 +39,125 @@ apiRoot = matchMethod $ onGET $ do
     respond $ OkJson (object ["server" .= sid])
 
 meRoutes :: CLApi ResponseReceived
-meRoutes = authenticate callerAuthenticator $ \callerData -> do
-    let handleTopic topicId = topicRoutes (Just callerData) (fromUserRef topicId (extractUnique callerData))
+meRoutes = authenticate callerAuth $ \callerData -> do
+    let handleTopic = topicRoutes (Just callerData)
+        meTopicsList =  matchMethod $
+            onGET (getUserTopics callerData >>= respond . OkJson) <>
+            onPOST (respond $ EmptyBody notImplemented501 [])
     matchPath $
         path endOrSlash (respond $ OkJson callerData) <|>
-        path (seg "about") (handleTopic (userAbout callerData)) <|>
-        path (seg "invite") (handleTopic (userInvite callerData)) <|>
         path (seg "sub") (handleSubs callerData) <|>
-        path topicIdSeg handleTopic
+        path (seg "about") (handleTopic (userAboutTopicRef callerData)) <|>
+        path (seg "invite") (handleTopic (userInviteTopicRef callerData)) <|>
+        path (seg "topic" </> endOrSlash) meTopicsList <|>
+        path topicIdSeg (handleTopic . userTopicRef callerData)
 
 handleSubs :: User -> CLApi ResponseReceived
-handleSubs callerData = respond $ EmptyBody notImplemented501 []
-
--- | todo v important
-callerAuthenticator :: CLApi (Maybe User)
-callerAuthenticator = return Nothing
+handleSubs _ = respond $ EmptyBody notImplemented501 []
 
 localUserRoutes :: UserRef -> CLApi ResponseReceived
-localUserRoutes user = runQuery (getBy user) >>= maybe userNotFound userPaths
-    where
-    handleTopic = topicRoutes Nothing . flip fromUserRef user
-    userNotFound = respond $ DefaultHeaders notFound404 $ ErrorReport "user_not_found" Nothing Nothing
-    userPaths userData = matchPath $
+localUserRoutes = withUser $ \userData -> do
+    let userTopicsList = matchMethod $ onGET $ getUserTopics userData >>= respond . OkJson
+        handleTopic = topicRoutes Nothing
+    matchPath $
         path endOrSlash (respond $ OkJson userData) <|>
-        path (seg "about") (handleTopic (userAbout userData)) <|>
-        path (seg "invite") (handleTopic (userInvite userData)) <|>
-        path topicIdSeg handleTopic
+        path (seg "about") (handleTopic (userAboutTopicRef userData)) <|>
+        path (seg "invite") (handleTopic (userInviteTopicRef userData)) <|>
+        path (seg "topic" </> endOrSlash) userTopicsList <|>
+        path topicIdSeg (handleTopic . userTopicRef userData)
 
 anyUserRoutes :: UserRef -> CLApi ResponseReceived
-anyUserRoutes user =  getServerId >>= \sid -> if (sid == userRefServer user) then localUserRoutes user else respond $ EmptyBody notImplemented501 []
+anyUserRoutes user =  getServerId >>= \sid -> if sid == userRefServer user then localUserRoutes user else respond $ EmptyBody notImplemented501 []
 
 topicRoutes :: Maybe User -> TopicRef -> CLApi ResponseReceived
-topicRoutes maybeCaller topic = respond $ DefaultHeaders notImplemented501 $ object ["topic" .= topic]
+topicRoutes = withTopic . topicRoutesInner
+
+topicRoutesInner :: Maybe User -> Topic -> CLApi ResponseReceived
+topicRoutesInner maybeCaller topicData = matchPath $
+    pathEndOrSlash (matchGET getTopicR) <|>
+    pathLastSeg "banner" (matchMethod $
+        onGET (allowGetField topicBanner) <>
+        onPUT (reauth $ const rNotImplemented)) <|>
+    pathLastSeg "info" (matchMethod $
+        onGET (allowGetField topicInfo) <>
+        onPUT rNotImplemented) <|>
+    pathLastSeg "mode" (matchMethod $ 
+        onGET (allowGetField topicMode) <>
+        onPUT rNotImplemented) <|>
+    path (seg "member") (topicMemberRoutes maybeCaller topicData) <|> -- n.b. screwing this up breaks everything.
+    path (seg "message") (matchMethod $
+         onGET rNotImplemented <>
+         onPOST (matchPath $ pathEndOrSlash $ rNotImplemented))
+    where
+    reauth :: (User -> CLApi ResponseReceived) -> CLApi ResponseReceived
+    reauth = reauthenticate maybeCaller callerAuth
+    authRequired = authenticatedOnly . topicMode $ topicData
+    membershipRequired = membersOnly . topicMode $ topicData
+    respondCensored = respond $ OkJson $ CensoredTopic topicData
+    respondFull = respond $ OkJson topicData
+    getTopicR
+        | membershipRequired = tryGetAuth maybeCaller >>= maybe respondCensored (findMemberUser topicData >=> maybe respondCensored (const respondFull)) 
+        | authRequired = maybe respondCensored (const respondFull) maybeCaller
+        | otherwise = respondFull
+    allowGetField f
+        | membershipRequired = reauth (\caller -> withMemberAuth topicData caller (ErrorReport "not_member" Nothing Nothing) (const $ respond $ OkJson $ f topicData))
+        | authRequired = reauth $ const $ respond $ OkJson $ f topicData
+        | otherwise = respond $ OkJson $ f topicData
+
+
+--mayUnless :: a -> Maybe b -> Maybe a
+--mayUnless a = maybe (Just a) (const Nothing)
+
+{-
+authorizeTopicAction :: Topic -> (TopicMode -> MemberMode -> Bool) -> CLApi ResponseReceived -> User -> CLApi ResponseReceived
+authorizeTopicAction tp p act caller = authorize authAction act
+    where
+    authAction = maybe False runPred <$> findMemberUser caller tp
+    runPred = p (topicMode tp) . memberMode
+    
+reqReadConf :: Maybe User -> Topic -> CLApi ResponseReceived -> CLApi ResponseReceived
+reqReadConf maybeCaller topicData modeCheck inner = go
+    where
+    reauth = reauthenticate maybeCaller callerAuth
+    authRequired = authenticatedOnly . topicMode $ topicData
+    membershipRequired = membersOnly . topicMode $ topicData
+    go
+        | membershipRequired = reauth (\caller -> authorize 
+-}
+
+mayUnless :: a -> Bool -> Maybe a
+mayUnless _ True = Nothing
+mayUnless a False = Just a
+
+topicQueryGuard :: Maybe User -> Topic -> CLApi ResponseReceived -> CLApi ResponseReceived
+topicQueryGuard maybeCaller topicData inner = go
+    where
+    reauth = reauthenticate maybeCaller callerAuth
+    authRequired = authenticatedOnly . topicMode $ topicData
+    membershipRequired = membersOnly . topicMode $ topicData
+    go
+        | membershipRequired = reauth (\caller -> 
+                                        withMemberAuth topicData caller (ErrorReport "not_member" Nothing Nothing) $ \memberMode ->
+                                            authorize (return $ mayUnless (ErrorReport "read_denied" Nothing Nothing) (mmRead memberMode)) inner)
+        | authRequired = reauth (const inner)
+        | otherwise = inner
+
+-- | assume we've already matched the member segment
+topicMemberRoutes :: Maybe User -> Topic -> CLApi ResponseReceived
+topicMemberRoutes maybeCaller topicData = matchPath $
+    pathEndOrSlash (matchGET $ tqd $ listTopicMembers topicData >>= respond . OkJson) <|>
+    path (localUserExtractor </> endOrSlash) (getLocalUserRef >=> memberRoute) <|>
+    path (anyUserExtractor </> endOrSlash) memberRoute
+    where
+    tqd = topicQueryGuard maybeCaller topicData
+    memberRoute :: UserRef -> CLApi ResponseReceived
+    memberRoute ur = matchMethod $
+        onGET rNotImplemented <>
+        onPUT rNotImplemented <>
+        onPOST rNotImplemented
+
+rNotImplemented :: MonadRespond m => m ResponseReceived
+rNotImplemented = respond $ EmptyBody notImplemented501 []
 
 localUserExtractor :: PathExtractor1 (ServerId -> UserRef)
 localUserExtractor = (seg "user" </> value) <&> hListMapTo1 (flip UserCoordKey)
