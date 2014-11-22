@@ -18,12 +18,8 @@ import Model.TopicMember
 import Model.Message
 import Model.ID
 import Model.StorableJson
---import Api
---import Api.Root
 
-import Api.Config
-import Api.Monad
-import Api.Hah
+import Api
 import Web.DefaultRespondServer
 import System.Log.FastLogger
 

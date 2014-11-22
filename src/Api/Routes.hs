@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Api.Hah where
+module Api.Routes where
 
 import Data.Monoid ((<>))
 import Control.Applicative ((<$>), Applicative, (<|>))
@@ -50,7 +50,7 @@ apiRoot = matchMethod $ onGET $ do
 
 meRoutes :: CLApi ResponseReceived
 meRoutes = authenticate callerAuthenticator $ \callerData -> do
-    let handleTopic topicId = topicRoutes (fromUserRef topicId (extractUnique callerData))
+    let handleTopic topicId = topicRoutes (Just callerData) (fromUserRef topicId (extractUnique callerData))
     matchPath $
         path endOrSlash (respond $ OkJson callerData) <|>
         path (seg "about") (handleTopic (userAbout callerData)) <|>
@@ -58,7 +58,7 @@ meRoutes = authenticate callerAuthenticator $ \callerData -> do
         path (seg "sub") (handleSubs callerData) <|>
         path topicIdSeg handleTopic
 
-handleSubs :: UserRef -> CLApi ResponseReceived
+handleSubs :: User -> CLApi ResponseReceived
 handleSubs callerData = respond $ EmptyBody notImplemented501 []
 
 -- | todo v important
@@ -68,7 +68,7 @@ callerAuthenticator = return Nothing
 localUserRoutes :: UserRef -> CLApi ResponseReceived
 localUserRoutes user = runQuery (getBy user) >>= maybe userNotFound userPaths
     where
-    handleTopic = topicRoutes . flip fromUserRef user
+    handleTopic = topicRoutes Nothing . flip fromUserRef user
     userNotFound = respond $ DefaultHeaders notFound404 $ ErrorReport "user_not_found" Nothing Nothing
     userPaths userData = matchPath $
         path endOrSlash (respond $ OkJson userData) <|>
@@ -79,8 +79,8 @@ localUserRoutes user = runQuery (getBy user) >>= maybe userNotFound userPaths
 anyUserRoutes :: UserRef -> CLApi ResponseReceived
 anyUserRoutes user =  getServerId >>= \sid -> if (sid == userRefServer user) then localUserRoutes user else respond $ EmptyBody notImplemented501 []
 
-topicRoutes :: TopicRef -> CLApi ResponseReceived
-topicRoutes topic = respond $ DefaultHeaders notImplemented501 $ object ["topic" .= topic]
+topicRoutes :: Maybe User -> TopicRef -> CLApi ResponseReceived
+topicRoutes maybeCaller topic = respond $ DefaultHeaders notImplemented501 $ object ["topic" .= topic]
 
 localUserExtractor :: PathExtractor1 (ServerId -> UserRef)
 localUserExtractor = (seg "user" </> value) <&> hListMapTo1 (flip UserCoordKey)
@@ -93,3 +93,51 @@ anyUserExtractor = (seg "server" </> value </> seg "user" </> value) <&> hListMa
 
 topicIdSeg :: PathExtractor1 TopicId
 topicIdSeg = seg "topic" </> value
+
+
+{- todo
+main api:
+/me MeR GET
+/me/about MeAboutTopicSubR TopicSub getMeAboutTopicSub 
+/me/invite MeInviteTopicSubR TopicSub getMeInviteTopicSub
+/me/topic MeTopicsR GET POST
+/me/topic/#TopicId MeTopicSubR TopicSub getMeTopicSub
+-- subscription system
+/me/sub/user/#UserId/topic/#TopicId SubsLocalR PUT
+-- local users
+/user/#UserId LocalUserR GET
+/user/#UserId/about LocalUserAboutTopicSubR TopicSub getLocalUserAboutTopicSub
+/user/#UserId/invite LocalUserInviteTopicSubR TopicSub getLocalUserInviteTopicSub
+/user/#UserId/topic LocalUserTopicsR GET
+/user/#UserId/topic/#TopicId LocalUserTopicSubR TopicSub getLocalUserTopicSub
+-- todo remote topics
+-- /server/#ServerId/user/#UserId AnyUserR GET
+-- /server/#ServerId/user/#UserId/topic AnyUserTopicsR GET
+-- /server/#ServerId/user/#UserId/ AnyUserR GET
+-- /server/#ServerId/user/#UserId/about AnyUserAboutTopicSubR TopicSub getAnyUserAboutTopicSub
+-- /server/#ServerId/user/#UserId/invite AnyUserInviteTopicSubR TopicSub getAnyUserInviteTopicSub
+-- /server/#ServerId/user/#UserId/topic/#TopicId AnyUserTopicSubR TopicSub getAnyUserTopicSub
+
+topics api:
+/ TopicR GET
+/banner TopicBannerR GET PUT
+/info TopicInfoR GET PUT
+/mode TopicModeR GET PUT
+/member MembersR GET
+/member/user/#UserId LocalMemberR GET PUT POST
+/member/server/#ServerId/user/#UserId MemberR GET PUT POST
+/message MsgR GET POST
+/message/first MsgFirst1R GET
+-- todo limit the number of messages
+/message/first/#Int MsgFirstR GET
+/message/last MsgLast1R GET
+/message/last/#Int MsgLastR GET
+/message/before/#MessageId MsgBefore1R GET
+/message/before/#MessageId/#Int MsgBeforeR GET
+/message/after/#MessageId MsgAfter1R GET
+/message/after/#MessageId/#Int MsgAfterR GET
+/message/at/#MessageId MsgAt1R GET
+/message/at/#MessageId/#Int MsgAtR GET
+/message/from/#MessageId MsgFrom1R GET
+/message/from/#MessageId/#Int MsgFromR GET
+-}
