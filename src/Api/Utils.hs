@@ -1,33 +1,25 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Api.Utils where
 
 import Data.Aeson ((.=), object, Value, ToJSON)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Network.HTTP.Types (Status, badRequest400, forbidden403, notFound404, internalServerError500, notImplemented501)
+import Control.Lens ((<&>))
 
-import Yesod.Core (MonadHandler, TypedContent, toTypedContent)
-import Yesod.Core.Handler (lookupHeader, sendResponseStatus, notAuthenticated)
-import Yesod.Core.Json (returnJson)
+import Web.Respond
 
 import Model.ID (UserId(..))
 import Model.User()
 import Model.Topic()
 import Operations (OpError(..), OpType(..))
 
-reasonObject :: Text -> [(Text, Value)] -> Value
-reasonObject r d = object $ ("reason" .= r) : d
-
-returnErrorObject :: Monad m => Text -> [(Text, Value)] -> m TypedContent
-returnErrorObject = ((return . toTypedContent) .) . reasonObject
-
-notImplemented :: MonadHandler m => m Value
-notImplemented = sendResponseStatus notImplemented501 ()
-
 --todo this is of course stupid
-extractUserId :: (MonadHandler m) => m UserId
-extractUserId = lookupHeader "x-chatless-test-uid" >>= maybe notAuthenticated (return . UserId . decodeUtf8)
+extractUserId :: MonadRespond m => m (Maybe UserId)
+extractUserId = lookupHeader "x-chatless-test-uid" <&> (UserId . decodeUtf8)
 
+-- all of this needs cleanup
+{-
 respondOpResult :: (MonadHandler m, ToJSON a) => Either OpError a -> m Value
 respondOpResult = either respondOpError returnJson
 
@@ -60,3 +52,4 @@ opTypeName SendMessage = "send_message"
 opTypeName SetBanner = "set_banner"
 opTypeName InviteUser = "invite_user"
 opTypeName GetRemoteUser = "get_remote_user"
+-}

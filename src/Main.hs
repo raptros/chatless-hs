@@ -2,34 +2,40 @@
 module Main where
 
 import qualified Data.Text as T
-import Yesod.Core
 import Data.Pool (Pool)
 import Database.Groundhog
 import Database.Groundhog.Sqlite
 --import Database.Groundhog.Postgresql
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Base (MonadBase, liftBase, liftBaseDefault)
+import Control.Monad.Trans.Control (MonadTransControl, StT, liftWith, restoreT, defaultLiftWith, defaultRestoreT, MonadBaseControl, StM, liftBaseWith, defaultLiftBaseWith, restoreM, defaultRestoreM, ComposeSt)
 import Database.Groundhog.Core (ConnectionManager(..))
 import Control.Monad.Logger (NoLoggingT)
 import Control.Monad
-
 import Model.User
 import Model.Topic
 import Model.TopicMember
 import Model.Message
 import Model.ID
 import Model.StorableJson
+
 import Api
-import Api.Root
+import Web.DefaultRespondServer
+import System.Log.FastLogger
+
 import Data.Maybe
 
 main :: IO ()
 main = do
+    logger <- newStdoutLoggerSet defaultBufSize 
     pool <- setup
-    warp 3000 $ Chatless {
-        backendConn = pool,
-        localServer = ServerId "local"
+    let cl = CLConfig {
+        _clcServerId = ServerId "local",
+        _clcDb = pool
     }
+    runWaiApp 3000 logger (apiApplication cl)
 
-setup :: IO (Pool CLBackend)
+setup :: IO (Pool CLDb)
 setup = do
     pool <- createSqlitePool "fakery.db" 1
     runChatlessMigrate pool

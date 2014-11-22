@@ -21,6 +21,9 @@ import Control.Lens.TH (DefName(TopName))
 lensName :: Name -> [DefName]
 lensName n = [TopName $ mkName (nameBase n ++ "Lens")]
 
+mkLensName :: Name -> [Name] -> Name -> [DefName]
+mkLensName = const (const lensName)
+
 modifyHead :: (a -> a) -> [a] -> [a]
 modifyHead _ [] = []
 modifyHead f (x:xs) = f x : xs
