@@ -83,28 +83,18 @@ topicRoutesInner maybeCaller topicData = matchPath $
     pathLastSeg "mode" (matchMethod $ 
         onGET (getField topicMode) <>
         onPUT rNotImplemented) <|>
-    path (seg "member") (topicMemberRoutes maybeCaller topicData) <|> -- n.b. screwing this up breaks everything.
+    path (seg "member") (matchPath $
+        pathEndOrSlash (matchGET $ listTopicMembersForCall maybeCaller topicData) <|>
+        path (localUserExtractor </> endOrSlash) (getLocalUserRef >=> memberRoute) <|>
+        path (anyUserExtractor </> endOrSlash) memberRoute) <|>
     path (seg "message") (topicMessageRoutes maybeCaller topicData)
     where
     getField :: ToJSON a => (Topic -> a) -> CLApi ResponseReceived
     getField = getTopicFieldForCall maybeCaller topicData
-
-mayUnless :: a -> Bool -> Maybe a
-mayUnless _ True = Nothing
-mayUnless a False = Just a
-
--- | assume we've already matched the member segment
-topicMemberRoutes :: Maybe User -> Topic -> CLApi ResponseReceived
-topicMemberRoutes maybeCaller topicData = matchPath $
-    pathEndOrSlash (matchGET $
-        tqg $ listTopicMembers topicData >>= respond . OkJson) <|>
-    path (localUserExtractor </> endOrSlash) (getLocalUserRef >=> memberRoute) <|>
-    path (anyUserExtractor </> endOrSlash) memberRoute
-    where
-    tqg = topicQueryGuard maybeCaller topicData
+    -- queries and ops for a particular member of the topic
     memberRoute :: UserRef -> CLApi ResponseReceived
     memberRoute ur = matchMethod $
-        onGET (tqg $ findMemberRef topicData ur >>= maybeNotFound (MemberNotFound (getRefFromTopic topicData) ur) (respond . OkJson)) <>
+        onGET (getTopicMemberForCall maybeCaller topicData ur) <>
         onPUT rNotImplemented <>
         onPOST rNotImplemented
 

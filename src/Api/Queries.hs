@@ -83,10 +83,16 @@ withMemberAuth :: (MonadChatless m, MonadRespond m, ReportableError e) => Tp.Top
 withMemberAuth topic user err = authorizeE (findMemberUser topic user <&> maybe (Left err) (Right . Tm.memberMode))
 
 topicMembersQuery :: MonadControlIO m => Tp.TopicRef -> Gh.DbPersist CLDb m [Tm.MemberPartial]
-topicMembersQuery tr = (fmap (uncurry Tm.MemberPartial)) <$> Gh.project (Tm.MemberUserField, Tm.MemberModeField) (Tm.MemberTopicField Gh.==. tr)
+topicMembersQuery tr = fmap (uncurry Tm.MemberPartial) <$> Gh.project (Tm.MemberUserField, Tm.MemberModeField) (Tm.MemberTopicField Gh.==. tr)
 
 listTopicMembers :: MonadChatless m => Tp.Topic -> m [Tm.MemberPartial]
 listTopicMembers = runQuery . topicMembersQuery . Tp.getRefFromTopic
+
+listTopicMembersForCall :: (MonadRespond m, MonadChatless m) => Maybe Ur.User -> Tp.Topic -> m ResponseReceived
+listTopicMembersForCall maybeCaller topicData = topicQueryGuard maybeCaller topicData $ listTopicMembers topicData >>= respond . OkJson
+
+getTopicMemberForCall :: (MonadRespond m, MonadChatless m) => Maybe Ur.User -> Tp.Topic -> Ur.UserRef -> m ResponseReceived
+getTopicMemberForCall maybeCaller topicData memberRef = topicQueryGuard maybeCaller topicData $ findMemberRef topicData memberRef >>= maybeNotFound (MemberNotFound (Tp.getRefFromTopic topicData) memberRef) (respond . OkJson)
 
 authRequired :: Tp.Topic -> Bool
 authRequired = Tp.authenticatedOnly . Tp.topicMode
@@ -96,15 +102,16 @@ membershipRequired = Tp.membersOnly . Tp.topicMode
 
 getTopicForCall :: (MonadRespond m, MonadChatless m) => Maybe Ur.User -> Tp.Topic -> m ResponseReceived
 getTopicForCall maybeCaller topicData
-    | membershipRequired topicData = runMaybeT (do
-        caller <- MaybeT $ tryGetAuth maybeCaller 
-        member <- MaybeT $ findMemberUser topicData caller
-        lift respondFull) >>= maybe respondCensored return
+    | membershipRequired topicData = runMaybeT membershipRequiredResponse >>= maybe respondCensored return
     | authRequired topicData = maybe respondCensored (const respondFull) maybeCaller
     | otherwise = respondFull
     where
     respondCensored = respond $ OkJson $ Tp.CensoredTopic topicData
     respondFull = respond $ OkJson topicData
+    membershipRequiredResponse = do
+        caller <- MaybeT $ tryGetAuth maybeCaller
+        member <- MaybeT $ findMemberUser topicData caller
+        lift respondFull
 
 getTopicFieldForCall :: (MonadRespond m, MonadChatless m, ToJSON v) => Maybe Ur.User -> Tp.Topic -> (Tp.Topic -> v) -> m ResponseReceived
 getTopicFieldForCall maybeCaller topicData f
