@@ -15,7 +15,6 @@ import Network.HTTP.Types.Status
 import Control.Lens ((<&>))
 import Web.Respond
 import Web.Respond.HListUtils
-
 import Api.Config
 import Api.Monad
 import Api.Queries
@@ -74,87 +73,50 @@ topicRoutes = withTopic . topicRoutesInner
 
 topicRoutesInner :: Maybe User -> Topic -> CLApi ResponseReceived
 topicRoutesInner maybeCaller topicData = matchPath $
-    pathEndOrSlash (matchGET getTopicR) <|>
+    pathEndOrSlash (matchGET $ getTopicForCall maybeCaller topicData) <|>
     pathLastSeg "banner" (matchMethod $
-        onGET (allowGetField topicBanner) <>
-        onPUT (reauth $ const rNotImplemented)) <|>
+        onGET (getField topicBanner) <>
+        onPUT rNotImplemented) <|>
     pathLastSeg "info" (matchMethod $
-        onGET (allowGetField topicInfo) <>
+        onGET (getField topicInfo) <>
         onPUT rNotImplemented) <|>
     pathLastSeg "mode" (matchMethod $ 
-        onGET (allowGetField topicMode) <>
+        onGET (getField topicMode) <>
         onPUT rNotImplemented) <|>
     path (seg "member") (topicMemberRoutes maybeCaller topicData) <|> -- n.b. screwing this up breaks everything.
-    path (seg "message") (matchMethod $
-         onGET rNotImplemented <>
-         onPOST (matchPath $ pathEndOrSlash $ rNotImplemented))
+    path (seg "message") (topicMessageRoutes maybeCaller topicData)
     where
-    reauth :: (User -> CLApi ResponseReceived) -> CLApi ResponseReceived
-    reauth = reauthenticate maybeCaller callerAuth
-    authRequired = authenticatedOnly . topicMode $ topicData
-    membershipRequired = membersOnly . topicMode $ topicData
-    respondCensored = respond $ OkJson $ CensoredTopic topicData
-    respondFull = respond $ OkJson topicData
-    getTopicR
-        | membershipRequired = tryGetAuth maybeCaller >>= maybe respondCensored (findMemberUser topicData >=> maybe respondCensored (const respondFull)) 
-        | authRequired = maybe respondCensored (const respondFull) maybeCaller
-        | otherwise = respondFull
-    allowGetField f
-        | membershipRequired = reauth (\caller -> withMemberAuth topicData caller (ErrorReport "not_member" Nothing Nothing) (const $ respond $ OkJson $ f topicData))
-        | authRequired = reauth $ const $ respond $ OkJson $ f topicData
-        | otherwise = respond $ OkJson $ f topicData
-
-
---mayUnless :: a -> Maybe b -> Maybe a
---mayUnless a = maybe (Just a) (const Nothing)
-
-{-
-authorizeTopicAction :: Topic -> (TopicMode -> MemberMode -> Bool) -> CLApi ResponseReceived -> User -> CLApi ResponseReceived
-authorizeTopicAction tp p act caller = authorize authAction act
-    where
-    authAction = maybe False runPred <$> findMemberUser caller tp
-    runPred = p (topicMode tp) . memberMode
-    
-reqReadConf :: Maybe User -> Topic -> CLApi ResponseReceived -> CLApi ResponseReceived
-reqReadConf maybeCaller topicData modeCheck inner = go
-    where
-    reauth = reauthenticate maybeCaller callerAuth
-    authRequired = authenticatedOnly . topicMode $ topicData
-    membershipRequired = membersOnly . topicMode $ topicData
-    go
-        | membershipRequired = reauth (\caller -> authorize 
--}
+    getField :: ToJSON a => (Topic -> a) -> CLApi ResponseReceived
+    getField = getTopicFieldForCall maybeCaller topicData
 
 mayUnless :: a -> Bool -> Maybe a
 mayUnless _ True = Nothing
 mayUnless a False = Just a
 
-topicQueryGuard :: Maybe User -> Topic -> CLApi ResponseReceived -> CLApi ResponseReceived
-topicQueryGuard maybeCaller topicData inner = go
-    where
-    reauth = reauthenticate maybeCaller callerAuth
-    authRequired = authenticatedOnly . topicMode $ topicData
-    membershipRequired = membersOnly . topicMode $ topicData
-    go
-        | membershipRequired = reauth (\caller -> 
-                                        withMemberAuth topicData caller (ErrorReport "not_member" Nothing Nothing) $ \memberMode ->
-                                            authorize (return $ mayUnless (ErrorReport "read_denied" Nothing Nothing) (mmRead memberMode)) inner)
-        | authRequired = reauth (const inner)
-        | otherwise = inner
-
 -- | assume we've already matched the member segment
 topicMemberRoutes :: Maybe User -> Topic -> CLApi ResponseReceived
 topicMemberRoutes maybeCaller topicData = matchPath $
-    pathEndOrSlash (matchGET $ tqd $ listTopicMembers topicData >>= respond . OkJson) <|>
+    pathEndOrSlash (matchGET $
+        tqg $ listTopicMembers topicData >>= respond . OkJson) <|>
     path (localUserExtractor </> endOrSlash) (getLocalUserRef >=> memberRoute) <|>
     path (anyUserExtractor </> endOrSlash) memberRoute
     where
-    tqd = topicQueryGuard maybeCaller topicData
+    tqg = topicQueryGuard maybeCaller topicData
     memberRoute :: UserRef -> CLApi ResponseReceived
     memberRoute ur = matchMethod $
-        onGET rNotImplemented <>
+        onGET (tqg $ findMemberRef topicData ur >>= maybeNotFound (MemberNotFound (getRefFromTopic topicData) ur) (respond . OkJson)) <>
         onPUT rNotImplemented <>
         onPOST rNotImplemented
+
+-- | assume we've matched the message segment
+topicMessageRoutes :: Maybe User -> Topic -> CLApi ResponseReceived
+topicMessageRoutes maybeCaller topicData = matchPath $
+    pathEndOrSlash (matchMethod $
+        onGET rNotImplemented <>
+        onPOST rNotImplemented)
+    where
+    tqg :: CLApi ResponseReceived -> CLApi ResponseReceived
+    tqg = topicQueryGuard maybeCaller topicData
 
 rNotImplemented :: MonadRespond m => m ResponseReceived
 rNotImplemented = respond $ EmptyBody notImplemented501 []

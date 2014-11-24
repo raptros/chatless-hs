@@ -5,6 +5,7 @@ import Control.Applicative ((<$>))
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE, withExceptT)
 import Data.Monoid ((<>))
 import Data.Aeson (object, (.=))
+import Network.Wai (ResponseReceived)
 
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
@@ -33,7 +34,10 @@ instance ReportableError AuthFailure where
     toErrorReport (NoSuchUser user) = ErrorReport "no_such_user" Nothing (Just $ object ["user" .= user])
 
 callerAuth :: (MonadRespond m, MonadChatless m) => m (Either AuthFailure User)
-callerAuth = runExceptT $ do
+callerAuth = runExceptT callerAuthInner
+
+callerAuthInner :: (MonadRespond m, MonadChatless m) =>  ExceptT AuthFailure m User
+callerAuthInner = do
     header <- findHeader "x-chatless-test-uid" >>= throwEMaybe MissingHeader
     uid <- withExceptT (const BadEncoding) (decodeUtf8Trans header)
     serverId <- getServerId
@@ -49,3 +53,5 @@ throwEMaybe e = maybe (throwE e) return
 decodeUtf8Trans :: Monad m => BS.ByteString -> ExceptT Terr.UnicodeException m T.Text
 decodeUtf8Trans = ExceptT . return . Tenc.decodeUtf8'
 
+callerReauth :: (MonadRespond m, MonadChatless m) => Maybe User -> (User -> m ResponseReceived) -> m ResponseReceived
+callerReauth maybeCaller = reauthenticate maybeCaller callerAuth

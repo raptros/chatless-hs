@@ -20,7 +20,7 @@ import Model.ID
 import Model.StorableJson
 
 import Api
-import Web.DefaultRespondServer
+import Web.Respond.DefaultServer
 import System.Log.FastLogger
 
 import Data.Maybe

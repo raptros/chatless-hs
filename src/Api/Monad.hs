@@ -25,6 +25,7 @@ import Data.Pool (Pool)
 import Database.Groundhog
 import Database.Groundhog.Core
 import Api.Config
+import Control.Monad.Catch
 
 class (Functor m, MonadIO m, MonadBaseControl IO m) => MonadChatless m where
     getServerId :: m ServerId
@@ -62,6 +63,12 @@ instance MonadTrans ChatlessT where
 
 instance MonadIO m => MonadIO (ChatlessT m) where
     liftIO = ChatlessT . liftIO 
+
+instance MonadThrow m => MonadThrow (ChatlessT m) where
+    throwM = lift . throwM
+
+instance MonadCatch m => MonadCatch (ChatlessT m) where
+    catch act h = ChatlessT $ catch (unChatlessT act) $ \e -> unChatlessT (h e)
 
 --these next three son of a gun all need UndecidableInstances
 
