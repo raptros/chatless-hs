@@ -1,31 +1,5 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs, MultiParamTypeClasses, FunctionalDependencies #-}
-module Model.Topic (
-    TopicMode(..),
-    getRefFromTopic,
-    defaultTopicMode,
-    aboutTopicMode,
-    inviteTopicMode,
-    Topic(..),
-    TopicCreate(..),
-    TopicRef,
-    Field(..),
-    TopicCoord(..),
-    Key(TopicCoordKey),
-    isCreator,
-    fromUserRef,
-    userTopicRef,
-    userAboutTopicRef,
-    userInviteTopicRef,
-    topicRefUserRef,
-    TopicConstructor(TopicConstructor),
-    topicRefId,
-    initializeTopic,
-    topicRefObject,
-    CensoredTopic(..),
-    topicRefFromObject,
-    TopicModeUpdate(..),
-    resolveTopicModeUpdateMay
-    ) where
+module Model.Topic where
 
 import Control.Applicative ((<$>), (<*>))
 
@@ -50,7 +24,10 @@ import Model.ID (ServerId, UserId, TopicId)
 import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, userInvite, User)
 import Model.StorableJson (StorableJson, storableEmpty)
 
+-- * Topic data model!
 
+-- ** Topic mode
+-- | 
 data TopicMode = TopicMode {
     readable :: Bool,
     writable :: Bool,
@@ -59,19 +36,58 @@ data TopicMode = TopicMode {
     authenticatedOnly :: Bool
 } deriving (Show, Eq)
 
+$(deriveJSON defaultOptions ''TopicMode)
+
+-- | readable, writable, not muted, members only, authenticated only
 defaultTopicMode :: TopicMode
 defaultTopicMode = TopicMode True True False True True
 
+-- | mode for creating "about" topics - readable, not writeable, not muted,
+-- members only, authenticated only
 aboutTopicMode :: TopicMode
 aboutTopicMode = TopicMode True False False True True
 
+-- | mode for creating "invite" topics - not readable, writeable, not
+-- muted, members only, authenticated only
 inviteTopicMode :: TopicMode
 inviteTopicMode = TopicMode False True False True True
 
-$(deriveJSON defaultOptions ''TopicMode)
-
+-- *** lenses into topic mode
 makeLensesWith (lensRules & lensField .~ mkLensName) ''TopicMode
 
+-- *** updating the topic mode
+
+-- | representation of a request to modify the topic mode
+data TopicModeUpdate = TopicModeUpdate {
+    updateReadable :: Maybe Bool,
+    updateWritable :: Maybe Bool,
+    updateMuted :: Maybe Bool,
+    updateMembersOnly :: Maybe Bool,
+    updateAuthenticatedOnly :: Maybe Bool
+} deriving (Show, Eq)
+
+$(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''TopicModeUpdate)
+
+-- **** lenses into the topic mode update 
+makeLensesWith (lensRules & lensField .~ mkLensName)  ''TopicModeUpdate
+
+-- **** applying updates
+
+-- | output is the whether or not any modifications were made to the topic
+-- mode and the final state of the topic mode
+resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> (Bool, TopicMode) 
+resolveTopicModeUpdate = runUpdateR $ do
+    readableLens ^.=? updateReadableLens
+    writableLens ^.=? updateWritableLens
+    mutedLens ^.=? updateMutedLens
+    membersOnlyLens ^.=? updateMembersOnlyLens
+    authenticatedOnlyLens ^.=? updateAuthenticatedOnlyLens
+
+-- | return a new state for the topic mode if any updates occurred.
+resolveTopicModeUpdateMay :: TopicMode -> TopicModeUpdate -> Maybe TopicMode
+resolveTopicModeUpdateMay = asMaybe .* resolveTopicModeUpdate
+
+-- ** topic create object
 data TopicCreate = TopicCreate {
     createId :: Maybe TopicId,
     createBanner :: Maybe T.Text,
@@ -81,6 +97,18 @@ data TopicCreate = TopicCreate {
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6} ''TopicCreate)
 
+-- | create a topic.
+initializeTopic :: UserRef -> TopicId -> TopicCreate -> Topic
+initializeTopic caller tid (TopicCreate _ mBanner mInfo mMode) = Topic {
+    topicServer = userRefServer caller,
+    topicUser = userRefUser caller,
+    topicId = tid,
+    topicBanner = fromMaybe "" mBanner,
+    topicInfo = fromMaybe storableEmpty mInfo,
+    topicMode = fromMaybe defaultTopicMode mMode
+}
+
+-- ** the topic itself
 data Topic = Topic {
     topicServer :: ServerId,
     topicUser :: UserId,
@@ -92,6 +120,7 @@ data Topic = Topic {
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 5 } ''Topic)
 
+-- *** generated database stuff
 mkPersist defaultCodegenConfig [groundhog|
 - embedded: TopicMode
 - entity: Topic
@@ -120,13 +149,63 @@ mkPersist defaultCodegenConfig [groundhog|
           dbName: mode
 |]
 
+-- *** topic utils 
+-- | whether or not there must be an authenticated caller in order to read
+-- this topic
+authRequired :: Topic -> Bool
+authRequired = authenticatedOnly . topicMode
+
+-- | whether or not a user must be a member in order to read this topic
+membershipRequired :: Topic -> Bool
+membershipRequired = membersOnly . topicMode
+
+-- | did this user create this topic
+isCreator :: UserRef -> Topic -> Bool
+isCreator (UserCoordKey sid uid) t = (sid == topicServer t) && (uid == topicUser t)
+
+isUserCreator :: User -> Topic -> Bool
+isUserCreator user topic = (userServer user == topicServer topic) && (userId user == topicUser topic)
+
+-- | the instance of ToJSON for CensoredTopic only includes the server,
+-- user, and id fields of the wrapped topic.
+newtype CensoredTopic = CensoredTopic Topic
+
+instance ToJSON CensoredTopic where
+    toJSON (CensoredTopic topic) = object ["server" .= topicServer topic, "user" .= topicUser topic, "id" .= topicId topic]
+
+-- ** topic references
+
+-- | reference key for a topic
 type TopicRef = Key Topic (Unique TopicCoord)
 
+-- *** obtaining topic references
+
+fromUserRef :: TopicId -> UserRef -> TopicRef
+fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid
+
+userTopicRef :: User -> TopicId -> TopicRef
+userTopicRef user tid = TopicCoordKey (userServer user) (userId user) tid
+
+userAboutTopicRef :: User -> TopicRef
+userAboutTopicRef user = TopicCoordKey (userServer user) (userId user) (userAbout user)
+
+userInviteTopicRef :: User -> TopicRef
+userInviteTopicRef user = TopicCoordKey (userServer user) (userId user) (userAbout user)
+
+getRefFromTopic :: Topic -> TopicRef
+getRefFromTopic = TopicCoordKey <$> topicServer <*> topicUser <*> topicId
+
+-- *** getting things out of topic references
+
+-- | get the user ref from the topic ref
 topicRefUserRef :: TopicRef -> UserRef
 topicRefUserRef (TopicCoordKey sid uid _) = UserCoordKey sid uid
 
+-- |
 topicRefId :: TopicRef -> TopicId
 topicRefId (TopicCoordKey _ _ tid) = tid
+
+-- *** using topic refs as JSON
 
 topicRefObject :: TopicRef -> Object
 topicRefObject (TopicCoordKey sid uid tid) = H.fromList ["server" .= sid, "user" .= uid, "topic" .= tid]
@@ -140,61 +219,3 @@ topicRefFromObject v = TopicCoordKey <$> v .: "server" <*> v .: "user" <*> v .: 
 instance FromJSON (Key Topic (Unique TopicCoord)) where
     parseJSON = withObject "TopicCoordKey" topicRefFromObject
 
-fromUserRef :: TopicId -> UserRef -> TopicRef
-fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid
-
-userTopicRef :: User -> TopicId -> TopicRef
-userTopicRef user = TopicCoordKey (userServer user) (userId user) 
-
-userAboutTopicRef :: User -> TopicRef
-userAboutTopicRef user = userTopicRef user (userAbout user)
-
-userInviteTopicRef :: User -> TopicRef
-userInviteTopicRef user = userTopicRef user (userInvite user)
-
-isCreator :: UserRef -> Topic -> Bool
-isCreator (UserCoordKey sid uid) t = (sid == topicServer t) && (uid == topicUser t)
-
-getRefFromTopic :: Topic -> TopicRef
-getRefFromTopic = TopicCoordKey <$> topicServer <*> topicUser <*> topicId
-
-initializeTopic :: UserRef -> TopicId -> TopicCreate -> Topic
-initializeTopic caller tid (TopicCreate _ mBanner mInfo mMode) = Topic {
-    topicServer = userRefServer caller,
-    topicUser = userRefUser caller,
-    topicId = tid,
-    topicBanner = fromMaybe "" mBanner,
-    topicInfo = fromMaybe storableEmpty mInfo,
-    topicMode = fromMaybe defaultTopicMode mMode
-}
-
-data TopicModeUpdate = TopicModeUpdate {
-    updateReadable :: Maybe Bool,
-    updateWritable :: Maybe Bool,
-    updateMuted :: Maybe Bool,
-    updateMembersOnly :: Maybe Bool,
-    updateAuthenticatedOnly :: Maybe Bool
-} deriving (Show, Eq)
-
-$(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''TopicModeUpdate)
-
-makeLensesWith (lensRules & lensField .~ mkLensName)  ''TopicModeUpdate
-
---resolveTopicModeUpdate :: TopicMode -> TopicModeUpdate -> TopicMode
---resolveTopicModeUpdate tm tmu = snd $ resolveTopicModeUpdate' tm tmu
-
-resolveTopicModeUpdate' :: TopicMode -> TopicModeUpdate -> (Bool, TopicMode) 
-resolveTopicModeUpdate' = runUpdateR $ do
-    readableLens ^.=? updateReadableLens
-    writableLens ^.=? updateWritableLens
-    mutedLens ^.=? updateMutedLens
-    membersOnlyLens ^.=? updateMembersOnlyLens
-    authenticatedOnlyLens ^.=? updateAuthenticatedOnlyLens
-
-resolveTopicModeUpdateMay :: TopicMode -> TopicModeUpdate -> Maybe TopicMode
-resolveTopicModeUpdateMay = asMaybe .* resolveTopicModeUpdate'
-
-newtype CensoredTopic = CensoredTopic Topic
-
-instance ToJSON CensoredTopic where
-    toJSON (CensoredTopic topic) = object ["server" .= topicServer topic, "user" .= topicUser topic, "id" .= topicId topic]

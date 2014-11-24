@@ -57,13 +57,16 @@ infixr 4 .=?
 runUpdate :: a -> State (Bool, a) () -> (Bool, a)
 runUpdate = flip execState . (False ,)
 
+-- | update the state based on whatsit
 resolveUpdateR :: (MonadState (Bool, s) m, Eq b, MonadReader t m) => Lens' s b -> Lens' t (Maybe b) -> m ()
 resolveUpdateR l lv = view lv >>= resolveUpdate l
 
 infixr 4 ^.=?
+-- | equivalent to 'resolveUpdateR'
 (^.=?) :: (MonadState (Bool, s) m, Eq b, MonadReader t m) => Lens' s b -> Lens' t (Maybe b) -> m ()
 (^.=?) = resolveUpdateR
 
+-- | do thing
 runUpdateR :: StateT (Bool, a) (Reader b) () -> a -> b -> (Bool, a)
 runUpdateR op = runReader . execStateT op . (False,)
 

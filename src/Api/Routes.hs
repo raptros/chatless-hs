@@ -102,11 +102,20 @@ topicRoutesInner maybeCaller topicData = matchPath $
 topicMessageRoutes :: Maybe User -> Topic -> CLApi ResponseReceived
 topicMessageRoutes maybeCaller topicData = matchPath $
     pathEndOrSlash (matchMethod $
-        onGET rNotImplemented <>
-        onPOST rNotImplemented)
+        onGET (messagesLast (Just (Natural 1))) <>
+        onPOST rNotImplemented) <|>
+    path (seg "first" </> optCountEndSeg) (\mCount -> matchGET rNotImplemented) <|>
+    path (seg "last" </> optCountEndSeg) (\mCount -> matchGET rNotImplemented) <|>
+    path (seg "before" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented) <|>
+    path (seg "after" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented) <|>
+    path (seg "at" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented) <|>
+    path (seg "from" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented)
     where
     tqg :: CLApi ResponseReceived -> CLApi ResponseReceived
     tqg = topicQueryGuard maybeCaller topicData
+
+midSeg :: PathExtractor1 MessageId
+midSeg = value
 
 rNotImplemented :: MonadRespond m => m ResponseReceived
 rNotImplemented = respond $ EmptyBody notImplemented501 []
@@ -123,6 +132,8 @@ anyUserExtractor = (seg "server" </> value </> seg "user" </> value) <&> hListMa
 topicIdSeg :: PathExtractor1 TopicId
 topicIdSeg = seg "topic" </> value
 
+optCountEndSeg :: PathExtractor1 (Maybe Natural) 
+optCountEndSeg = ((value </> endOrSlash) <&> hListMapTo1 Just) <|> (endOrSlash <&> hListMapTo1 Nothing)
 
 {- todo
 main api:
