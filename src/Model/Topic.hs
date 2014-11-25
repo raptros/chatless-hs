@@ -11,7 +11,7 @@ import Data.Aeson (ToJSON, FromJSON, (.=), (.:), toJSON, parseJSON, Object, Valu
 import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
 import Data.Aeson.Types (Parser)
 
-import Database.Groundhog.Core (Key, Field, Unique)
+import Database.Groundhog.Core (Key, Unique)
 import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
 import Control.Lens.TH (makeLensesWith, lensRules, lensField)
@@ -21,7 +21,7 @@ import Utils ((.*))
 
 import Model.Utils (mkLensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
 import Model.ID (ServerId, UserId, TopicId)
-import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, userInvite, User)
+import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, User)
 import Model.StorableJson (StorableJson, storableEmpty)
 
 -- * Topic data model!
@@ -185,6 +185,9 @@ fromUserRef tid (UserCoordKey sid uid) = TopicCoordKey sid uid tid
 
 userTopicRef :: User -> TopicId -> TopicRef
 userTopicRef user tid = TopicCoordKey (userServer user) (userId user) tid
+
+topicRefFromUser :: TopicId -> User -> TopicRef
+topicRefFromUser = flip userTopicRef
 
 userAboutTopicRef :: User -> TopicRef
 userAboutTopicRef user = TopicCoordKey (userServer user) (userId user) (userAbout user)

@@ -6,7 +6,6 @@ import Control.Applicative ((<$>), (<|>))
 import Model.ID
 import Model.User
 import Model.Topic
-import Model.TopicMember
 import Network.Wai
 import Data.Monoid ((<>))
 import Control.Monad ((>=>))
@@ -38,35 +37,36 @@ apiRoot = matchMethod $ onGET $ do
     respond $ OkJson (object ["server" .= sid])
 
 meRoutes :: CLApi ResponseReceived
-meRoutes = authenticate callerAuth $ \callerData -> do
-    let handleTopic = topicRoutes (Just callerData)
-        meTopicsList =  matchMethod $
-            onGET (getUserTopics callerData >>= respond . OkJson) <>
-            onPOST (respond $ EmptyBody notImplemented501 [])
-    matchPath $
-        path endOrSlash (respond $ OkJson callerData) <|>
-        path (seg "sub") (handleSubs callerData) <|>
-        path (seg "about") (handleTopic (userAboutTopicRef callerData)) <|>
-        path (seg "invite") (handleTopic (userInviteTopicRef callerData)) <|>
-        path (seg "topic" </> endOrSlash) meTopicsList <|>
-        path topicIdSeg (handleTopic . userTopicRef callerData)
+meRoutes = authenticate callerAuth $ \callerData -> matchPath $
+    path endOrSlash (respond $ OkJson callerData) <|>
+    path (seg "sub") (handleSubs callerData) <|>
+    path (seg "about") (callerTopic callerData userAboutTopicRef) <|>
+    path (seg "invite") (callerTopic callerData userInviteTopicRef) <|>
+    path (seg "topic" </> endOrSlash) (matchMethod $
+         onGET (getUserTopics callerData >>= respond . OkJson) <>
+         onPOST rNotImplemented) <|>
+    path topicIdSeg (callerTopic callerData . topicRefFromUser)
 
 handleSubs :: User -> CLApi ResponseReceived
 handleSubs _ = respond $ EmptyBody notImplemented501 []
 
 localUserRoutes :: UserRef -> CLApi ResponseReceived
-localUserRoutes = withUser $ \userData -> do
-    let userTopicsList = matchMethod $ onGET $ getUserTopics userData >>= respond . OkJson
-        handleTopic = topicRoutes Nothing
-    matchPath $
-        path endOrSlash (respond $ OkJson userData) <|>
-        path (seg "about") (handleTopic (userAboutTopicRef userData)) <|>
-        path (seg "invite") (handleTopic (userInviteTopicRef userData)) <|>
-        path (seg "topic" </> endOrSlash) userTopicsList <|>
-        path topicIdSeg (handleTopic . userTopicRef userData)
+localUserRoutes = withUser $ \userData -> matchPath $
+    path endOrSlash (respond $ OkJson userData) <|>
+    path (seg "about") (otherUserTopic userData userAboutTopicRef) <|>
+    path (seg "invite") (otherUserTopic userData userInviteTopicRef) <|>
+    path (seg "topic" </> endOrSlash) (matchGET $ 
+         getUserTopics userData >>= respond . OkJson) <|>
+    path topicIdSeg (otherUserTopic userData . topicRefFromUser)
 
 anyUserRoutes :: UserRef -> CLApi ResponseReceived
 anyUserRoutes user =  getServerId >>= \sid -> if sid == userRefServer user then localUserRoutes user else respond $ EmptyBody notImplemented501 []
+
+callerTopic :: User -> (User -> TopicRef) -> CLApi ResponseReceived
+callerTopic user f = topicRoutes (Just user) (f user)
+
+otherUserTopic :: User -> (User -> TopicRef) -> CLApi ResponseReceived
+otherUserTopic user f = topicRoutes Nothing (f user)
 
 topicRoutes :: Maybe User -> TopicRef -> CLApi ResponseReceived
 topicRoutes = withTopic . topicRoutesInner
@@ -87,7 +87,16 @@ topicRoutesInner maybeCaller topicData = matchPath $
         pathEndOrSlash (matchGET $ listTopicMembersForCall maybeCaller topicData) <|>
         path (localUserExtractor </> endOrSlash) (getLocalUserRef >=> memberRoute) <|>
         path (anyUserExtractor </> endOrSlash) memberRoute) <|>
-    path (seg "message") (topicMessageRoutes maybeCaller topicData)
+    path (seg "message") (matchPath $
+        pathEndOrSlash (matchMethod $
+            onGET (messagesLast maybeCaller topicData $ Just $ Natural $ 1) <>
+            onPOST rNotImplemented) <|>
+        pathGET (seg "first" </> optCountEndSeg) (messagesFirst maybeCaller topicData) <|>
+        pathGET (seg "last" </> optCountEndSeg) (messagesLast maybeCaller topicData) <|>
+        pathGET (seg "before" </> midSeg </> optCountEndSeg) (messagesBefore maybeCaller topicData) <|>
+        pathGET (seg "after" </> midSeg </> optCountEndSeg) (messagesAfter maybeCaller topicData) <|>
+        pathGET (seg "at" </> midSeg </> optCountEndSeg) (messagesAt maybeCaller topicData) <|>
+        pathGET (seg "from" </> midSeg </> optCountEndSeg) (messagesFrom maybeCaller topicData))
     where
     getField :: ToJSON a => (Topic -> a) -> CLApi ResponseReceived
     getField = getTopicFieldForCall maybeCaller topicData
@@ -97,22 +106,6 @@ topicRoutesInner maybeCaller topicData = matchPath $
         onGET (getTopicMemberForCall maybeCaller topicData ur) <>
         onPUT rNotImplemented <>
         onPOST rNotImplemented
-
--- | assume we've matched the message segment
-topicMessageRoutes :: Maybe User -> Topic -> CLApi ResponseReceived
-topicMessageRoutes maybeCaller topicData = matchPath $
-    pathEndOrSlash (matchMethod $
-        onGET (messagesLast (Just (Natural 1))) <>
-        onPOST rNotImplemented) <|>
-    path (seg "first" </> optCountEndSeg) (\mCount -> matchGET rNotImplemented) <|>
-    path (seg "last" </> optCountEndSeg) (\mCount -> matchGET rNotImplemented) <|>
-    path (seg "before" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented) <|>
-    path (seg "after" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented) <|>
-    path (seg "at" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented) <|>
-    path (seg "from" </> midSeg </> optCountEndSeg) (\mid mCount -> matchGET rNotImplemented)
-    where
-    tqg :: CLApi ResponseReceived -> CLApi ResponseReceived
-    tqg = topicQueryGuard maybeCaller topicData
 
 midSeg :: PathExtractor1 MessageId
 midSeg = value

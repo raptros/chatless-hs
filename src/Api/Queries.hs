@@ -18,19 +18,16 @@ import Web.Respond
 import qualified Database.Groundhog as Gh
 import qualified Data.Text as T
 import Web.Respond.HListUtils ()
-import Control.Monad.Logger (MonadLogger)
-import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
 import Control.Monad.Logger
-import Control.Monad.Catch
 import Control.Monad.Except
+import Control.Monad (void)
 import Safe (headMay)
 
 import Control.Lens ((<&>))
 
-import Api.Config
 import Api.Monad
 import Api.Auth
 
@@ -67,6 +64,8 @@ instance ReportableError QueryFailure where
     toErrorReport (TopicNotFound tr) = errorReportWithDetails textNotFound $ object ["topic" .= tr]
     toErrorReport (MemberNotFound tr ur) = errorReportWithDetails textNotFound $ object ["topic" .= tr, "user" .= ur]
     toErrorReport (QueryDenied qdr) = simpleErrorReport (queryDenyReasonText qdr) 
+    toErrorReport (LoadMessageFailed mr) = errorReportWithDetails "load_message_failed" $ object ["message" .= mr]
+    toErrorReport (MessageNotFound mr) = errorReportWithDetails textNotFound $ object ["message" .= mr]
 
 -- * user queries 
 
@@ -118,7 +117,7 @@ getTopicForCall maybeCaller topicData
     respondFull = respond $ OkJson topicData
     membershipRequiredResponse = do
         caller <- MaybeT $ tryGetAuth maybeCaller
-        member <- MaybeT $ findMemberUser topicData caller
+        void $ MaybeT $ findMemberUser topicData caller
         lift respondFull
 
 -- | allow the call to receive a particular field of the topic based on the
