@@ -47,6 +47,10 @@ instance MonadChatless m => MonadChatless (NoLoggingT m) where
     getServerId = lift getServerId
     getConn = lift getConn
 
+instance MonadChatless m => MonadChatless (LoggingT m) where
+    getServerId = lift getServerId
+    getConn = lift getConn
+
 newtype ChatlessT m a = ChatlessT {
     unChatlessT :: LoggingT (ReaderT CLConfig m) a
 } deriving (Functor, Applicative, Monad, MonadReader CLConfig, MonadLogger)
@@ -96,8 +100,13 @@ runTransaction =  onConn . runDbPersist
 onConnNoTransaction :: MonadChatless m => (CLDb -> m a) -> m a
 onConnNoTransaction f = getConn >>= withConnNoTransaction f
 
-runQuery :: MonadChatless m => DbPersist CLDb (NoLoggingT m) a -> m a
-runQuery q = runNoLoggingT $ onConnNoTransaction (runDbPersist q)
+type CLQuery m a = DbPersist CLDb m a
+
+runQuery :: (MonadChatless m) => DbPersist CLDb (LoggingT m) a -> m a
+runQuery q = runStdoutLoggingT $ onConnNoTransaction (runDbPersist q)
+
+--runQueryNoLog :: MonadChatless m => DbPersist CLDb (NoLoggingT m) a -> m a
+--runQueryNoLog q = runNoLoggingT (runQuery q)
 
 type Chatless = ChatlessT IO
 

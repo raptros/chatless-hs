@@ -1,15 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Api.Auth where
 
 import Control.Applicative ((<$>))
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE, withExceptT)
+import Control.Monad.Except
 import Data.Monoid ((<>))
 import Data.Aeson (object, (.=))
 import Network.Wai (ResponseReceived)
-
-import qualified Data.ByteString as BS
 import qualified Data.Text as T
-import qualified Data.Text.Encoding.Error as Terr
 import qualified Data.Text.Encoding as Tenc
 import Database.Groundhog
 
@@ -36,22 +34,19 @@ instance ReportableError AuthFailure where
 callerAuth :: (MonadRespond m, MonadChatless m) => m (Either AuthFailure User)
 callerAuth = runExceptT callerAuthInner
 
-callerAuthInner :: (MonadRespond m, MonadChatless m) =>  ExceptT AuthFailure m User
+callerAuthInner :: (MonadRespond m, MonadChatless m, MonadError AuthFailure m) => m User
 callerAuthInner = do
-    header <- findHeader "x-chatless-test-uid" >>= throwEMaybe MissingHeader
-    uid <- withExceptT (const BadEncoding) (decodeUtf8Trans header)
+    header <- findHeader "x-chatless-test-uid" >>= throwMaybe MissingHeader
+    uid <- either (const $ throwError BadEncoding) return $ Tenc.decodeUtf8' header
     serverId <- getServerId
     let userRef = UserCoordKey serverId (UserId uid) 
-    runQuery (getBy userRef) >>= throwEMaybe (NoSuchUser userRef)
+    runQuery (getBy userRef) >>= throwMaybe (NoSuchUser userRef)
 
 tryGetAuth :: (MonadRespond m, MonadChatless m) => Maybe User -> m (Maybe User)
 tryGetAuth = maybe (either (const Nothing) Just <$> callerAuth) (return . Just)
 
-throwEMaybe :: Monad m => e -> Maybe a -> ExceptT e m a
-throwEMaybe e = maybe (throwE e) return
-
-decodeUtf8Trans :: Monad m => BS.ByteString -> ExceptT Terr.UnicodeException m T.Text
-decodeUtf8Trans = ExceptT . return . Tenc.decodeUtf8'
+throwMaybe :: (MonadError e m) => e -> Maybe a -> m a
+throwMaybe e = maybe (throwError e) return
 
 callerReauth :: (MonadRespond m, MonadChatless m) => Maybe User -> (User -> m ResponseReceived) -> m ResponseReceived
 callerReauth maybeCaller = reauthenticate maybeCaller callerAuth

@@ -1,14 +1,15 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, QuasiQuotes, TypeFamilies, MultiParamTypeClasses, TypeSynonymInstances, FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 
 import qualified Data.Text as T
 import Data.Pool (Pool)
 import Database.Groundhog
 import Database.Groundhog.Sqlite
---import Database.Groundhog.Postgresql
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Base (MonadBase, liftBase, liftBaseDefault)
-import Control.Monad.Trans.Control (MonadTransControl, StT, liftWith, restoreT, defaultLiftWith, defaultRestoreT, MonadBaseControl, StM, liftBaseWith, defaultLiftBaseWith, restoreM, defaultRestoreM, ComposeSt)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Trans.Control (MonadBaseControl)
 import Database.Groundhog.Core (ConnectionManager(..))
 import Control.Monad.Logger (NoLoggingT)
 import Control.Monad
@@ -39,7 +40,7 @@ setup :: IO (Pool CLDb)
 setup = do
     pool <- createSqlitePool "fakery.db" 1
     runChatlessMigrate pool
-    (flip runDbConn) pool $ insertFakeUsers "local" ["user0", "user1", "user2"]
+    flip runDbConn pool $ insertFakeUsers "local" ["user0", "user1", "user2"]
     return pool
 
 insertFakeUsers :: PersistBackend m => T.Text -> [T.Text] -> m ()
