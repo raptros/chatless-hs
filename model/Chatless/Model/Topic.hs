@@ -1,5 +1,14 @@
-{-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs, MultiParamTypeClasses, FunctionalDependencies #-}
-module Model.Topic where
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+
+module Chatless.Model.Topic where
 
 import Control.Applicative ((<$>), (<*>))
 
@@ -17,12 +26,10 @@ import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 import Control.Lens.TH (makeLensesWith, lensRules, lensField)
 import Control.Lens.Operators ((&), (.~))
 
-import Utils ((.*))
-
-import Model.Utils (mkLensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
-import Model.ID (ServerId, UserId, TopicId)
-import Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, User)
-import Model.StorableJson (StorableJson, storableEmpty)
+import Chatless.Model.Utils (mkLensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
+import Chatless.Model.ID (ServerId, UserId, TopicId)
+import Chatless.Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, User)
+import Chatless.Model.StorableJson (StorableJson, storableEmpty)
 
 -- * Topic data model!
 
@@ -85,7 +92,7 @@ resolveTopicModeUpdate = runUpdateR $ do
 
 -- | return a new state for the topic mode if any updates occurred.
 resolveTopicModeUpdateMay :: TopicMode -> TopicModeUpdate -> Maybe TopicMode
-resolveTopicModeUpdateMay = asMaybe .* resolveTopicModeUpdate
+resolveTopicModeUpdateMay = (asMaybe .) . resolveTopicModeUpdate
 
 -- ** topic create object
 data TopicCreate = TopicCreate {

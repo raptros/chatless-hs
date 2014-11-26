@@ -1,5 +1,12 @@
-{-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
-module Model.TopicMember where
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
+
+module Chatless.Model.TopicMember where
 
 import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
 import Control.Lens.TH (makeLensesWith, lensRules, lensField)
@@ -7,11 +14,9 @@ import Control.Lens.Operators ((&), (.~))
 
 import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
-import Utils ((.*))
-
-import Model.Utils (dropAndLowerHead, runUpdateR, (^.=?), asMaybe, mkLensName)
-import Model.User (UserRef)
-import Model.Topic (TopicMode(..), TopicRef)
+import Chatless.Model.Utils (dropAndLowerHead, runUpdateR, (^.=?), asMaybe, mkLensName)
+import Chatless.Model.User (UserRef)
+import Chatless.Model.Topic (TopicMode(..), TopicRef)
 
 
 data MemberMode = MemberMode {
@@ -75,9 +80,6 @@ data Member = Member {
 }
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6 } ''Member)
-
---subsetAsJson :: UserRef -> MemberMode -> Value
---subsetAsJson ur mm = object ["user" .= ur, "mode" .= mm]
 
 data MemberPartial = MemberPartial {
     mPartUser :: UserRef,
@@ -158,4 +160,4 @@ resolveMemberModeUpdate' = runUpdateR $ do
     mmSetModeLens ^.=? mmuSetModeLens
 
 resolveMemberModeUpdateMay :: MemberMode -> MemberModeUpdate -> Maybe MemberMode
-resolveMemberModeUpdateMay = asMaybe .* resolveMemberModeUpdate'
+resolveMemberModeUpdateMay = (asMaybe .) . resolveMemberModeUpdate'

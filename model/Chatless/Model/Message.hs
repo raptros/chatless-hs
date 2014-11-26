@@ -1,5 +1,12 @@
-{-# LANGUAGE TypeFamilies, FlexibleInstances, QuasiQuotes, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
-module Model.Message where
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
+
+module Chatless.Model.Message where
 
 import Data.Text (Text)
 import qualified Data.HashMap.Strict as H
@@ -12,11 +19,11 @@ import Database.Groundhog (DefaultKey, PersistBackend, Unique, AutoKey, migrate,
 import Database.Groundhog.Core (Migration)
 import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog, namingStyle, persistentNamingStyle)
 
-import Model.StorableJson (StorableJson)
-import Model.ID (MessageId)
-import Model.User (UserRef)
-import Model.Topic (TopicMode, TopicRef, topicRefObject, topicRefFromObject)
-import Model.TopicMember (MemberMode)
+import Chatless.Model.StorableJson (StorableJson)
+import Chatless.Model.ID (MessageId)
+import Chatless.Model.User (UserRef)
+import Chatless.Model.Topic (TopicMode, TopicRef, topicRefObject, topicRefFromObject)
+import Chatless.Model.TopicMember (MemberMode)
 
 data MsgContent = 
     MsgPosted { mcBody :: StorableJson } |

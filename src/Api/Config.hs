@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Api.Config where
 
-import Model.ID
+import Chatless.Model.ID
 import Control.Lens (makeLenses)
 import Data.Pool (Pool)
 import Database.Groundhog.Sqlite

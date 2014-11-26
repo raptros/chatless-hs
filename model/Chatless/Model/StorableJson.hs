@@ -1,6 +1,11 @@
-{-# LANGUAGE TypeFamilies, OverloadedStrings, GADTs #-}
-{- this exists so i can store json objects and arrays as primitives -}
-module Model.StorableJson (StorableJson, storableObject, storableEmpty) where 
+{-|
+
+this exists so i can store json objects and arrays as primitives 
+-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
+ 
+module Chatless.Model.StorableJson (StorableJson, storableObject, storableEmpty) where 
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB

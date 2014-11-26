@@ -1,5 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
-module Model.IDGen where
+module Chatless.Model.IDGen where
 
 import qualified Data.Text as T
 import qualified Data.UUID as UUID

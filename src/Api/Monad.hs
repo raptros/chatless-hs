@@ -8,7 +8,7 @@
 module Api.Monad where
 
 import Control.Applicative (Applicative)
-import Model.ID
+import Chatless.Model.ID
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import Control.Monad.Trans.Except (ExceptT )
 import Control.Monad.Trans.Maybe (MaybeT)

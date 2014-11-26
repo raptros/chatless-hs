@@ -3,9 +3,9 @@
 module Api.Routes where
 
 import Control.Applicative ((<$>), (<|>))
-import Model.ID
-import Model.User
-import Model.Topic
+import Chatless.Model.ID
+import Chatless.Model.User
+import Chatless.Model.Topic
 import Network.Wai
 import Data.Monoid ((<>))
 import Control.Monad ((>=>))

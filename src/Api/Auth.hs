@@ -13,8 +13,8 @@ import Database.Groundhog
 
 import Web.Respond
 
-import Model.ID
-import Model.User
+import Chatless.Model.ID
+import Chatless.Model.User
 
 import Api.Monad
 

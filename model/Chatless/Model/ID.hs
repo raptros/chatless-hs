@@ -1,7 +1,7 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
-module Model.ID  where
+{-# LANGUAGE TemplateHaskell #-}
+module Chatless.Model.ID  where
 
-import Model.IDGen
+import Chatless.Model.IDGen
 
 import Data.Text (Text)
 import qualified System.Random as R

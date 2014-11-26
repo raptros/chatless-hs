@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-} 
 {-# LANGUAGE TupleSections #-}
-module Model.Utils where
+module Chatless.Model.Utils where
 
 import qualified Data.Char as C
 import Data.Bool (bool)

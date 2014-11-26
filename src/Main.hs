@@ -13,12 +13,12 @@ import Control.Monad.Trans.Control (MonadBaseControl)
 import Database.Groundhog.Core (ConnectionManager(..))
 import Control.Monad.Logger (NoLoggingT)
 import Control.Monad
-import Model.User
-import Model.Topic
-import Model.TopicMember
-import Model.Message
-import Model.ID
-import Model.StorableJson
+import Chatless.Model.User
+import Chatless.Model.Topic
+import Chatless.Model.TopicMember
+import Chatless.Model.Message
+import Chatless.Model.ID
+import Chatless.Model.StorableJson
 
 import Api
 import Web.Respond.DefaultServer

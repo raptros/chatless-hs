@@ -14,10 +14,10 @@ import Control.Monad.Logger ()
 import Control.Monad.Except
 import Safe (headMay)
 
-import Model.ID
-import qualified Model.User as Ur
-import qualified Model.Topic as Tp
-import qualified Model.Message as Msg
+import Chatless.Model.ID
+import qualified Chatless.Model.User as Ur
+import qualified Chatless.Model.Topic as Tp
+import qualified Chatless.Model.Message as Msg
 import Api.Monad
 import Api.Queries.Base
 import Api.Queries.Topic

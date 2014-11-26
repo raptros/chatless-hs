@@ -10,8 +10,8 @@ import qualified Database.Groundhog as Gh
 
 import Web.Respond
 
-import qualified Model.Topic as Tp
-import qualified Model.User as Ur
+import qualified Chatless.Model.Topic as Tp
+import qualified Chatless.Model.User as Ur
 import Api.Queries.Base
 import Api.Monad
 

@@ -9,9 +9,9 @@ base types and utils for queries.
 {-# LANGUAGE ConstraintKinds #-}
 module Api.Queries.Base where
 
-import qualified Model.User as Ur
-import qualified Model.Topic as Tp
-import qualified Model.Message as Msg
+import qualified Chatless.Model.User as Ur
+import qualified Chatless.Model.Topic as Tp
+import qualified Chatless.Model.Message as Msg
 import Network.HTTP.Types.Status
 import Data.Aeson
 import Web.Respond

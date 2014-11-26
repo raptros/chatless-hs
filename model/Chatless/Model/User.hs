@@ -1,5 +1,12 @@
-{-# LANGUAGE FlexibleInstances, QuasiQuotes, TypeFamilies, GeneralizedNewtypeDeriving, TemplateHaskell, OverloadedStrings, GADTs #-}
-module Model.User (
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
+
+module Chatless.Model.User (
                   User(..),
                   UserRef,
                   Key(UserCoordKey),
@@ -18,8 +25,8 @@ import Data.Aeson.TH (deriveJSON, defaultOptions, fieldLabelModifier)
 import Database.Groundhog (Key, Unique)
 import Database.Groundhog.TH (mkPersist, defaultCodegenConfig, groundhog)
 
-import Model.ID (ServerId, UserId, TopicId)
-import Model.Utils (dropAndLowerHead)
+import Chatless.Model.ID (ServerId, UserId, TopicId)
+import Chatless.Model.Utils (dropAndLowerHead)
 
 data User = User {
     userServer :: ServerId,
