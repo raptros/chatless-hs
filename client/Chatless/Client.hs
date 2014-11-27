@@ -3,6 +3,7 @@ Description: api client for chatless
 
 api client library for chatless.
 -}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Chatless.Client where
 
@@ -12,11 +13,13 @@ import Network.HTTP.Types.Method
 import Network.HTTP.Types.Header
 import Control.Lens
 import Data.Aeson
+import Data.Aeson.TH
 import Chatless.Model.User
 import Chatless.Model.Topic
 import Control.Monad.IO.Class
 import Data.Default as Def
 
+import qualified Data.Text as T
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import Data.Monoid
@@ -31,6 +34,14 @@ data Session = Session {
     sessionApi :: ApiBase,
     sessionManager :: Manager
 }
+
+data ErrorReport {
+    reason :: T.Text,
+    message :: Maybe T.Text,
+    details :: Maybe Value
+} deriving (Eq, Show)
+
+$(deriveJSON defaultOptions ''ErrorReport)
 
 mkAbsPath :: [BS.ByteString] -> BS.ByteString
 mkAbsPath pth = mconcat $ fmap ("/" <>) pth
