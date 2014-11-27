@@ -41,7 +41,12 @@ library
         Chatless.Model.Topic,
         Chatless.Model.TopicMember,
         Chatless.Model.Message,
-        Chatless.Client
+        Chatless.Client,
+        Chatless.Client.Session,
+        Chatless.Client.Response,
+        Chatless.Client.Monad,
+        Chatless.Client.PathPointers,
+        Chatless.Client.Request
     build-depends:
         base >=4.7 && <4.8,
         transformers-base == 0.4.*,
@@ -49,6 +54,9 @@ library
         groundhog >= 0.6 && < 0.7,
         groundhog-th,
         transformers >= 0.4 && < 0.5,
+        containers >= 0.5.5 && < 0.6,
+        bifunctors,
+        exceptions == 0.6.*, 
         data-default >= 0.5,
         safe,
         http-types,
