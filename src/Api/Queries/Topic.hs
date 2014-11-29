@@ -30,7 +30,7 @@ import Control.Applicative ((<$>))
 -- | run the action given the topic, if the topic can be found
 withTopic :: (MonadChatless m, MonadRespond m) => (Tp.Topic -> m ResponseReceived) -> Tp.TopicRef -> m ResponseReceived
 withTopic act tref = runQuery (Gh.getBy tref) >>= maybe notFound act
-    where notFound = respond $ TopicNotFound tref
+    where notFound = respondNotFound (TopicNotFound tref)
     
 -- ** topic permissions 
 
@@ -56,8 +56,8 @@ getTopicForCall maybeCaller topicData
     | Tp.authRequired topicData = maybe respondCensored (const respondFull) maybeCaller
     | otherwise = respondFull
     where
-    respondCensored = respond $ OkJson $ Tp.CensoredTopic topicData
-    respondFull = respond $ OkJson topicData
+    respondCensored = respondOk $ Json $ Tp.CensoredTopic topicData
+    respondFull = respondOk $ Json topicData
     membershipRequiredResponse = do
         caller <- MaybeT $ tryGetAuth maybeCaller
         void $ MaybeT $ findMemberUser topicData caller
@@ -71,7 +71,7 @@ getTopicFieldForCall maybeCaller topicData f
     | Tp.authRequired topicData = reauth (const respondField)
     | otherwise = respondField
     where
-    respondField = respond $ OkJson $ f topicData
+    respondField = respondOk $ Json $ f topicData
     reauth = callerReauth maybeCaller 
 
 -- ** Topic member queries 
@@ -106,11 +106,11 @@ listTopicMembers = runQuery . topicMembersQuery . Tp.getRefFromTopic
 -- | respond to a call with the list of topic members if the permissions
 -- allow the caller to read. see 'topicQueryGuard'
 listTopicMembersForCall :: (MonadRespond m, MonadChatless m) => Maybe Ur.User -> Tp.Topic -> m ResponseReceived
-listTopicMembersForCall maybeCaller topicData = topicQueryGuard maybeCaller topicData $ listTopicMembers topicData >>= respond . OkJson
+listTopicMembersForCall maybeCaller topicData = topicQueryGuard maybeCaller topicData $ listTopicMembers topicData >>= respondOk . Json
 
 -- | respond to a call with a topic member's mode if the caller is allowed
 -- to. see 'topicQueryGuard
 getTopicMemberForCall :: (MonadRespond m, MonadChatless m) => Maybe Ur.User -> Tp.Topic -> Ur.UserRef -> m ResponseReceived
 getTopicMemberForCall maybeCaller topicData memberRef = topicQueryGuard maybeCaller topicData $ 
-    findMemberRef topicData memberRef >>= maybe (respond $ MemberNotFound (Tp.getRefFromTopic topicData) memberRef) (respond . OkJson . Tm.memberMode)
+    findMemberRef topicData memberRef >>= maybe (respondNotFound $ MemberNotFound (Tp.getRefFromTopic topicData) memberRef) (respondOk . Json . Tm.memberMode)
 

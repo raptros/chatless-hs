@@ -34,33 +34,33 @@ api = matchPath $
 apiRoot :: CLApi ResponseReceived
 apiRoot = matchMethod $ onGET $ do
     sid <- getServerId 
-    respond $ OkJson (object ["server" .= sid])
+    respondOk (object ["server" .= sid])
 
 meRoutes :: CLApi ResponseReceived
 meRoutes = authenticate callerAuth $ \callerData -> matchPath $
-    path endOrSlash (respond $ OkJson callerData) <|>
+    path endOrSlash (respondOk $ Json callerData) <|>
     path (seg "sub") (handleSubs callerData) <|>
     path (seg "about") (callerTopic callerData userAboutTopicRef) <|>
     path (seg "invite") (callerTopic callerData userInviteTopicRef) <|>
     path (seg "topic" </> endOrSlash) (matchMethod $
-         onGET (getUserTopics callerData >>= respond . OkJson) <>
+         onGET (getUserTopics callerData >>= respondOk . Json) <>
          onPOST rNotImplemented) <|>
     path topicIdSeg (callerTopic callerData . topicRefFromUser)
 
 handleSubs :: User -> CLApi ResponseReceived
-handleSubs _ = respond $ EmptyBody notImplemented501 []
+handleSubs _ = rNotImplemented
 
 localUserRoutes :: UserRef -> CLApi ResponseReceived
 localUserRoutes = withUser $ \userData -> matchPath $
-    path endOrSlash (respond $ OkJson userData) <|>
+    path endOrSlash (respondOk $ Json userData) <|>
     path (seg "about") (otherUserTopic userData userAboutTopicRef) <|>
     path (seg "invite") (otherUserTopic userData userInviteTopicRef) <|>
     path (seg "topic" </> endOrSlash) (matchGET $ 
-         getUserTopics userData >>= respond . OkJson) <|>
+         getUserTopics userData >>= respondOk . Json) <|>
     path topicIdSeg (otherUserTopic userData . topicRefFromUser)
 
 anyUserRoutes :: UserRef -> CLApi ResponseReceived
-anyUserRoutes user =  getServerId >>= \sid -> if sid == userRefServer user then localUserRoutes user else respond $ EmptyBody notImplemented501 []
+anyUserRoutes user =  getServerId >>= \sid -> if sid == userRefServer user then localUserRoutes user else rNotImplemented
 
 callerTopic :: User -> (User -> TopicRef) -> CLApi ResponseReceived
 callerTopic user f = topicRoutes (Just user) (f user)
@@ -111,7 +111,7 @@ midSeg :: PathExtractor1 MessageId
 midSeg = value
 
 rNotImplemented :: MonadRespond m => m ResponseReceived
-rNotImplemented = respond $ EmptyBody notImplemented501 []
+rNotImplemented = respondEmptyBody notImplemented501 []
 
 localUserExtractor :: PathExtractor1 (ServerId -> UserRef)
 localUserExtractor = (seg "user" </> value) <&> hListMapTo1 (flip UserCoordKey)

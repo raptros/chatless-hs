@@ -26,10 +26,13 @@ data AuthFailure =
     deriving (Eq, Show)
 
 instance ReportableError AuthFailure where
-    toErrorReport MissingHeader = ErrorReport "missing_header" Nothing Nothing
-    toErrorReport BadEncoding = ErrorReport "bad_encoding" (Just "request must be UTF8") Nothing
-    toErrorReport (MalformedHeader malformed) = ErrorReport "malformed_header" (Just $  "bad header: " <> malformed) Nothing
-    toErrorReport (NoSuchUser user) = ErrorReport "no_such_user" Nothing (Just $ object ["user" .= user])
+    reportError = (. authFailureErrorReport) . reportError
+
+authFailureErrorReport :: AuthFailure -> ErrorReport
+authFailureErrorReport MissingHeader = simpleErrorReport "missing header"
+authFailureErrorReport BadEncoding = errorReportWithMessage "bad encoding" "request must be utf-8"
+authFailureErrorReport (MalformedHeader malformed) = errorReportWithMessage "malformed header" ("bad header: " <> malformed)
+authFailureErrorReport (NoSuchUser user) = errorReportWithDetails "no such user" (object ["user" .= user])
 
 callerAuth :: (MonadRespond m, MonadChatless m) => m (Either AuthFailure User)
 callerAuth = runExceptT callerAuthInner

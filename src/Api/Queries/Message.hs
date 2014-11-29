@@ -54,7 +54,7 @@ runQueryMessagesFromEnd :: MonadChatless m => Direction -> Tp.TopicRef -> Int ->
 runQueryMessagesFromEnd dir tr count = runExceptT $ runQuery $ queryMessagesFromEnd dir tr count
 
 messageQuery :: (MonadChatless m, MonadRespond m) => (Tp.TopicRef -> Int -> m (Either QueryFailure [Msg.Message])) -> Tp.Topic -> Maybe Natural -> m ResponseReceived
-messageQuery queryRunner topicData mCount = queryRunner (Tp.getRefFromTopic topicData) (getCountDefault mCount) >>= either (respond . ResponseError notFound404) (respond . OkJson)
+messageQuery queryRunner topicData mCount = queryRunner (Tp.getRefFromTopic topicData) (getCountDefault mCount) >>= either (respondReportError notFound404 []) (respondOk . Json)
 
 messagesAtEnd :: (MonadRespond m, MonadChatless m) => Direction -> Maybe Ur.User -> Tp.Topic -> Maybe Natural -> m ResponseReceived
 messagesAtEnd dir maybeCaller topicData = topicQueryGuard maybeCaller topicData . messageQuery (runQueryMessagesFromEnd dir) topicData

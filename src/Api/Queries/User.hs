@@ -18,7 +18,7 @@ import Api.Monad
 -- | run an action on a user ... if that user can be found in the db
 withUser :: (MonadChatless m, MonadRespond m) => (Ur.User -> m ResponseReceived) -> Ur.UserRef -> m ResponseReceived
 withUser act uref = runQuery (Gh.getBy uref) >>= maybe notFound act
-    where notFound = respond $ UserNotFound uref
+    where notFound = respondNotFound (UserNotFound uref)
 
 -- | list out the topics a user has created
 getUserTopics :: MonadChatless m => Ur.User -> m [Tp.TopicRef]

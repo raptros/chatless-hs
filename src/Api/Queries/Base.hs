@@ -12,7 +12,6 @@ module Api.Queries.Base where
 import qualified Chatless.Model.User as Ur
 import qualified Chatless.Model.Topic as Tp
 import qualified Chatless.Model.Message as Msg
-import Network.HTTP.Types.Status
 import Data.Aeson
 import Web.Respond
 import qualified Database.Groundhog as Gh
@@ -51,24 +50,16 @@ textNotFound = "not_found"
 textLoadMessageFailed :: T.Text
 textLoadMessageFailed = "load_message_failed"
 
+qfErrorReport :: QueryFailure -> ErrorReport
+qfErrorReport (UserNotFound ur) = errorReportWithDetails textNotFound $ object ["user" .= ur]
+qfErrorReport (TopicNotFound tr) = errorReportWithDetails textNotFound $ object ["topic" .= tr]
+qfErrorReport (MemberNotFound tr ur) = errorReportWithDetails textNotFound $ object ["topic" .= tr, "user" .= ur]
+qfErrorReport (QueryDenied qdr) = simpleErrorReport (queryDenyReasonText qdr) 
+qfErrorReport (LoadMessageFailed mr) = errorReportWithDetails textLoadMessageFailed $ object ["message" .= mr]
+qfErrorReport (MessageNotFound mr) = errorReportWithDetails textNotFound $ object ["message" .= mr]
+
 instance ReportableError QueryFailure where
-    toErrorReport (UserNotFound ur) = errorReportWithDetails textNotFound $ object ["user" .= ur]
-    toErrorReport (TopicNotFound tr) = errorReportWithDetails textNotFound $ object ["topic" .= tr]
-    toErrorReport (MemberNotFound tr ur) = errorReportWithDetails textNotFound $ object ["topic" .= tr, "user" .= ur]
-    toErrorReport (QueryDenied qdr) = simpleErrorReport (queryDenyReasonText qdr) 
-    toErrorReport (LoadMessageFailed mr) = errorReportWithDetails textLoadMessageFailed $ object ["message" .= mr]
-    toErrorReport (MessageNotFound mr) = errorReportWithDetails textNotFound $ object ["message" .= mr]
-
-qfToResponseError :: QueryFailure -> ResponseError QueryFailure
-qfToResponseError qf@(UserNotFound _)      = ResponseError notFound404 qf
-qfToResponseError qf@(TopicNotFound _)     = ResponseError notFound404 qf
-qfToResponseError qf@(MemberNotFound _ _)  = ResponseError notFound404 qf
-qfToResponseError qf@(QueryDenied _)       = ResponseError forbidden403 qf
-qfToResponseError qf@(LoadMessageFailed _) = ResponseError internalServerError500 qf
-qfToResponseError qf@(MessageNotFound _)   = ResponseError notFound404 qf
-
-instance ToResponse QueryFailure where
-    toResponse = toResponse . qfToResponseError
+    reportError = (. qfErrorReport) . reportError
 
 getOrThrow :: MonadError e m => e -> Maybe a -> m a
 getOrThrow err = maybe (throwError err) return

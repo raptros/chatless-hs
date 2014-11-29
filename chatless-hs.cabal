@@ -96,7 +96,7 @@ executable "chatless"
         data-default-class,
         fast-logger == 2.*,
         transformers == 0.4.*,
-        respond >= 0.1 && < 0.2,
+        respond >= 0.2 && < 0.3,
         bifunctors,
         safe,
         containers == 0.5.5.*,
