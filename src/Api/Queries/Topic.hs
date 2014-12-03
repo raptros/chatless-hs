@@ -91,7 +91,7 @@ findMemberUser tp us = findMember (Tp.getRefFromTopic tp) (Ur.getRefFromUser us)
 -- | only run the inner route if a membership can be found for the caller;
 -- otherwise fail authorization with the given ReportableError.
 withMemberAuth :: (MonadChatless m, MonadRespond m, ReportableError e) => Tp.Topic -> Ur.User -> e -> (Tm.MemberMode -> m ResponseReceived) -> m ResponseReceived
-withMemberAuth topic user err = authorizeE $ toAuth <$> findMemberUser topic user
+withMemberAuth topic user err = (findMemberUser topic user >>=) . flip (authorizeE . toAuth)
     where
     toAuth = maybe (Left err) (Right . Tm.memberMode)
 
