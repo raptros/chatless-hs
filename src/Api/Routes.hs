@@ -22,7 +22,7 @@ import Api.Auth
 type CLApi = RespondT Chatless
 
 apiApplication :: CLConfig -> Application
-apiApplication conf = respondAppDefault (`runChatless` conf) api 
+apiApplication conf = respondAppDefault (`runChatless`q conf) api 
 
 api :: CLApi ResponseReceived
 api = matchPath $

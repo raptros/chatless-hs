@@ -74,4 +74,3 @@ getCountDefault = maybe 1 natToInt
 instance MonadError QueryFailure m => MonadError QueryFailure (Gh.DbPersist conn m) where
     throwError = lift . throwError
     catchError act h = Gh.DbPersist $ catchError (Gh.unDbPersist act) (Gh.unDbPersist . h)
-
