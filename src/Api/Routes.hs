@@ -18,11 +18,13 @@ import Api.Config
 import Api.Monad
 import Api.Queries
 import Api.Auth
+import Api.Ops
+import Control.Monad.Trans.Cont
 
 type CLApi = RespondT Chatless
 
 apiApplication :: CLConfig -> Application
-apiApplication conf = respondAppDefault (`runChatless`q conf) api 
+apiApplication conf = respondAppDefault (`runChatless` conf) api 
 
 api :: CLApi ResponseReceived
 api = matchPath $
@@ -76,7 +78,7 @@ topicRoutesInner maybeCaller topicData = matchPath $
     pathEndOrSlash (matchGET $ getTopicForCall maybeCaller topicData) <|>
     pathLastSeg "banner" (matchMethod $
         onGET (getField topicBanner) <>
-        onPUT rNotImplemented) <|>
+        onPUT (hPutBanner maybeCaller topicData)) <|>
     pathLastSeg "info" (matchMethod $
         onGET (getField topicInfo) <>
         onPUT rNotImplemented) <|>
@@ -106,6 +108,12 @@ topicRoutesInner maybeCaller topicData = matchPath $
         onGET (getTopicMemberForCall maybeCaller topicData ur) <>
         onPUT rNotImplemented <>
         onPOST rNotImplemented
+
+hPutBanner :: Maybe User -> Topic -> CLApi ResponseReceived
+hPutBanner maybeCaller topicData = runCont id $ do 
+    caller <- cont $ callerReauth maybeCaller
+    banner <- getTextBody <$> cont withRequiredBody
+    return $ changeBanner caller topicData banner
 
 midSeg :: PathExtractor1 MessageId
 midSeg = value

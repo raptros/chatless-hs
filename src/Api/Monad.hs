@@ -107,13 +107,10 @@ onConnNoTransaction f = getConn >>= withConnNoTransaction f
 
 type CLQuery m a = DbPersist CLDb m a
 
-runQuery :: (MonadChatless m, MonadCatch m, MonadLogger m) => DbPersist CLDb (NoLoggingT m) a -> m a
-runQuery q = runQuery' q
+runQuery :: (MonadChatless m) => DbPersist CLDb (NoLoggingT m) a -> m a
+runQuery = runNoLoggingT . onConnNoTransaction . runDbPersist
 
-runQuery' :: (MonadChatless m) => DbPersist CLDb (NoLoggingT m) a -> m a
-runQuery' = runNoLoggingT . onConnNoTransaction . runDbPersist
-
-runQueryLogged :: (MonadChatless m) => DbPersist CLDb (NoLoggingT m) a -> m a
+runQueryLogged :: (MonadChatless m) => DbPersist CLDb (LoggingT m) a -> m a
 runQueryLogged = runStdoutLoggingT . onConnNoTransaction . runDbPersist
 
 --runQueryNoLog :: MonadChatless m => DbPersist CLDb (NoLoggingT m) a -> m a

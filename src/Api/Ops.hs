@@ -1,9 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ConstraintKinds #-}
-module Api.Ops where
+module Api.Ops (
+               module Api.Ops.Topic
+               ) where
 
+{-
 import Network.Wai
 --import Network.HTTP.Types.Status
 import Web.Respond
@@ -24,9 +23,11 @@ import Api.Auth
 import qualified Api.Queries as Q
 import Control.Monad.Cont
 import Data.Aeson
+-}
 import Api.Ops.Topic
 
 -- * base
+{-
 data OpFailure =
     TopicOpFailed TopicOpFailure Tp.TopicRef 
     deriving (Eq, Show)
@@ -47,4 +48,4 @@ topicOpGuard maybeCaller topicData op checkModes inner = (`runCont` id) $ do
 
 -- ** topic fields ops
 
-opChangeBanner :: (PersistBackend m,
+-}

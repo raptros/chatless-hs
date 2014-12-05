@@ -7,15 +7,13 @@
 {-# LANGUAGE TypeFamilies #-}
 module Api.Ops.Topic where
 
-import Network.Wai
 --import Network.HTTP.Types.Status
 import Web.Respond
 import qualified Database.Groundhog as Gh
-import qualified Database.Groundhog.Core as Gh
 import Control.Monad.Logger ()
 --import Control.Monad.Except
 --import Safe (headMay)
-import Control.Applicative
+import Api.Queries ()
 
 import qualified Data.Text as T
 --import Chatless.Model.ID
@@ -24,8 +22,6 @@ import qualified Chatless.Model.Topic as Tp
 import qualified Chatless.Model.TopicMember as Tm
 import qualified Chatless.Model.Message as Msg
 import Api.Monad
-import Api.Auth
-import qualified Api.Queries as Q
 import Control.Monad.Cont
 import Control.Monad.Writer
 import Control.Monad.Catch
@@ -56,28 +52,20 @@ data TopicOpFailed = TopicOpFailed TopicOpFailure Tp.TopicRef deriving (Eq, Type
 
 instance Exception TopicOpFailed
                    
+opGetEffectiveMode :: (MonadThrow m, Functor m, Gh.PersistBackend m) => Tp.Topic -> Ur.User -> m (Tm.MemberMode)
+opGetEffectiveMode topic user
+    | Tp.isUserCreator user topic = return Tm.modeCreator
+    | otherwise = Gh.getBy (Tm.TargetMemberKey tRef uRef) >>= maybe (throwM $ TopicOpFailed NotMember tRef) (return . Tm.memberMode)
+    where
+    tRef = Tp.getRefFromTopic topic
+    uRef = Ur.getRefFromUser user
 
--- * monad
+changeBanner :: (MonadRespond m, MonadChatless m, MonadCatch m) => Ur.User -> Tp.Topic -> T.Text -> m (Either TopicOpFailed [Msg.MessageRef])
+changeBanner caller topic newBanner = try $ runTransaction $ execWriterT $ do
+    member <- lift $ opGetEffectiveMode topic caller 
+    let tRef = Tp.getRefFromTopic topic
+    unless (Tm.mmSetBanner member) $ throwM $ TopicOpFailed (NotPermitted SetBanner) tRef
 
-{-
-class (Gh.PersistBackend m, Functor m, MonadThrow m) => MonadTopicOp m where
-    sentMessage :: Msg.MessageRef -> m ()
-    failOp :: TopicOpFailure -> Tp.TopicRef -> m ()
-
-newtype TopicOpT m a = TopicOpT {
-    unTopicOpT :: WriterT [Msg.MessageRef] m a
-} deriving (Functor, Applicative, Monad, MonadWriter [Msg.MessageRef])
-
-instance (Gh.PersistBackend m, Functor m, MonadThrow m) => MonadTopicOp (TopicOpT m) where
-    sentMessage m = tell [m]
-    failOp f tr = throwM $ TopicOpFailed f tr
-
-instance MonadTrans TopicOpT where
-    lift = TopicOpT . lift
-
-instance MonadThrow m => MonadThrow (TopicOpT m) where
+-- absolutely disgusting
+instance MonadThrow m => MonadThrow (Gh.DbPersist conn m) where
     throwM = lift . throwM
-
-runTopicOpT :: (MonadChatless m, MonadCatch m) => TopicOpT m a -> m (Either TopicOpFailed (a, [Msg.MessageRef]))
-runTopicOpT act = try $ (runTransaction $ runWriterT $ unTopicOpT act) 
--}
