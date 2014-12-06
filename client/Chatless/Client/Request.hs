@@ -9,6 +9,10 @@ module Chatless.Client.Request where
 import Data.Aeson
 import Data.Monoid
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Encoding as TL
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
 
 import Data.Default as Def
 import Control.Monad.Except
@@ -85,4 +89,19 @@ getTopicMember = queryPtr
 
 getMessages :: MChatlessClient m => MessageQueryPtr -> m [Msg.Message]
 getMessages = queryPtr
+
+-- ** put and post requests
+sendBodyPath :: (MChatlessClient m, FromJSON a) => StdMethod -> BS.ByteString -> BSL.ByteString -> Path -> m a
+sendBodyPath method contentType body path = callApi path method [(hContentType, contentType)] (C.RequestBodyLBS body)
+
+sendBodyPtr :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> BSL.ByteString -> p -> m a
+sendBodyPtr method contentType body = sendBodyPath method contentType body . toPath
+
+sendBodyPtrSub :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> BSL.ByteString -> T.Text -> p -> m a
+sendBodyPtrSub method contentType body sub = sendBodyPtr method contentType body . pathSub sub
+
+-- todo: handle "204 No Content" responses properly
+setTopicBanner :: MChatlessClient m => TL.Text -> TopicPtr -> m (Maybe [Msg.MessageRef])
+setTopicBanner banner = sendBodyPtrSub PUT "text/plain" (TL.encodeUtf8 banner) "banner"
+
 

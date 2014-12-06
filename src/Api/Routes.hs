@@ -78,13 +78,13 @@ topicRoutesInner maybeCaller topicData = matchPath $
     pathEndOrSlash (matchGET $ getTopicForCall maybeCaller topicData) <|>
     pathLastSeg "banner" (matchMethod $
         onGET (getField topicBanner) <>
-        onPUT (hPutBanner maybeCaller topicData)) <|>
+        onPUT (performOp getTextBodyS changeBanner)) <|>
     pathLastSeg "info" (matchMethod $
         onGET (getField topicInfo) <>
-        onPUT rNotImplemented) <|>
+        onPUT (performOp getJson changeInfo)) <|>
     pathLastSeg "mode" (matchMethod $ 
         onGET (getField topicMode) <>
-        onPUT rNotImplemented) <|>
+        onPUT (performOp getJson changeTopicMode)) <|>
     path (seg "member") (matchPath $
         pathEndOrSlash (matchGET $ listTopicMembersForCall maybeCaller topicData) <|>
         path (localUserExtractor </> endOrSlash) (getLocalUserRef >=> memberRoute) <|>
@@ -92,7 +92,7 @@ topicRoutesInner maybeCaller topicData = matchPath $
     path (seg "message") (matchPath $
         pathEndOrSlash (matchMethod $
             onGET (messagesLast maybeCaller topicData $ Just $ Natural $ 1) <>
-            onPOST rNotImplemented) <|>
+            onPOST (performOp getJson sendMessage)) <|>
         pathGET (seg "first" </> optCountEndSeg) (messagesFirst maybeCaller topicData) <|>
         pathGET (seg "last" </> optCountEndSeg) (messagesLast maybeCaller topicData) <|>
         pathGET (seg "before" </> midSeg </> optCountEndSeg) (messagesBefore maybeCaller topicData) <|>
@@ -100,20 +100,22 @@ topicRoutesInner maybeCaller topicData = matchPath $
         pathGET (seg "at" </> midSeg </> optCountEndSeg) (messagesAt maybeCaller topicData) <|>
         pathGET (seg "from" </> midSeg </> optCountEndSeg) (messagesFrom maybeCaller topicData))
     where
+    performOp :: (FromBody e b) => (b -> v) -> (User -> Topic -> v -> CLApi TopicOpResult) -> CLApi ResponseReceived
+    performOp = hPerformOperation maybeCaller topicData
     getField :: ToJSON a => (Topic -> a) -> CLApi ResponseReceived
     getField = getTopicFieldForCall maybeCaller topicData
     -- queries and ops for a particular member of the topic
     memberRoute :: UserRef -> CLApi ResponseReceived
     memberRoute ur = matchMethod $
         onGET (getTopicMemberForCall maybeCaller topicData ur) <>
-        onPUT rNotImplemented <>
+        onPUT (performOp getJson $ changeMemberMode ur) <>
         onPOST rNotImplemented
 
-hPutBanner :: Maybe User -> Topic -> CLApi ResponseReceived
-hPutBanner maybeCaller topicData = runCont id $ do 
+hPerformOperation :: (FromBody e b) => Maybe User -> Topic -> (b -> v) -> (User -> Topic -> v -> CLApi TopicOpResult) -> CLApi ResponseReceived
+hPerformOperation maybeCaller topicData fGetBody c = evalCont $ do
     caller <- cont $ callerReauth maybeCaller
-    banner <- getTextBody <$> cont withRequiredBody
-    return $ changeBanner caller topicData banner
+    body <- fGetBody <$> cont withRequiredBody
+    return $ c caller topicData body >>= respondTopicOpResult
 
 midSeg :: PathExtractor1 MessageId
 midSeg = value

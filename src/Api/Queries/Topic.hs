@@ -8,6 +8,7 @@ module Api.Queries.Topic where
 
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
+import Control.Monad.Trans.Cont
 import Control.Monad.Except
 
 import Network.Wai (ResponseReceived)
@@ -39,9 +40,11 @@ withTopic act tref = runQuery (Gh.getBy tref) >>= maybe notFound act
 -- authenticated caller can read the topic, etc
 topicQueryGuard :: (MonadRespond m, MonadChatless m) => Maybe Ur.User -> Tp.Topic -> m ResponseReceived -> m ResponseReceived
 topicQueryGuard maybeCaller topicData inner 
-    | Tp.membershipRequired topicData = reauth $ \caller -> 
-        withMemberAuth topicData caller (QueryDenied NotMember) $ \memberMode ->
-            if Tm.mmRead memberMode || Tp.isUserCreator caller topicData then inner else handleDenied $ QueryDenied ReadDenied
+    | Tp.membershipRequired topicData = evalCont $ do
+        caller <- cont reauth
+        memberMode <- cont $ withMemberAuth topicData caller (QueryDenied NotMember)
+        let canQuery = Tm.mmRead memberMode || Tp.isUserCreator caller topicData
+        return $ if canQuery then inner else handleDenied (QueryDenied ReadDenied)
     | Tp.authRequired topicData = reauth (const inner)
     | otherwise = inner
     where
@@ -91,7 +94,7 @@ findMemberUser tp us = findMember (Tp.getRefFromTopic tp) (Ur.getRefFromUser us)
 -- | only run the inner route if a membership can be found for the caller;
 -- otherwise fail authorization with the given ReportableError.
 withMemberAuth :: (MonadChatless m, MonadRespond m, ReportableError e) => Tp.Topic -> Ur.User -> e -> (Tm.MemberMode -> m ResponseReceived) -> m ResponseReceived
-withMemberAuth topic user err = (findMemberUser topic user >>=) . flip (authorizeE . toAuth)
+withMemberAuth topic user err inner = findMemberUser topic user >>= \mMember -> authorizeE (toAuth mMember) inner
     where
     toAuth = maybe (Left err) (Right . Tm.memberMode)
 
