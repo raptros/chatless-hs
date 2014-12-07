@@ -32,7 +32,7 @@ import Chatless.Client.Monad
 import Chatless.Client.PathPointers
 
 -- * the basic request
-performRequest :: MChatlessClient m => (r -> Either ApiError a) -> (Session -> m r) -> m a
+performRequest :: MChatlessClient m => (r -> Either ResponseError a) -> (Session -> m r) -> m a
 performRequest process call = getSession >>= call >>= (either throwError return . process)
 
 callApi :: (MChatlessClient m, FromJSON a) => Path -> StdMethod -> RequestHeaders -> C.RequestBody -> m a
@@ -90,18 +90,32 @@ getTopicMember = queryPtr
 getMessages :: MChatlessClient m => MessageQueryPtr -> m [Msg.Message]
 getMessages = queryPtr
 
+getJustMessage :: MChatlessClient m => JustMessagePtr -> m Msg.Message
+getJustMessage = queryPtr
+
 -- ** put and post requests
-sendBodyPath :: (MChatlessClient m, FromJSON a) => StdMethod -> BS.ByteString -> BSL.ByteString -> Path -> m a
-sendBodyPath method contentType body path = callApi path method [(hContentType, contentType)] (C.RequestBodyLBS body)
+sendBodyPath :: (MChatlessClient m, FromJSON a) => StdMethod -> BS.ByteString -> Path -> BSL.ByteString -> m a
+sendBodyPath method contentType path body = callApi path method [(hContentType, contentType)] (C.RequestBodyLBS body)
 
-sendBodyPtr :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> BSL.ByteString -> p -> m a
-sendBodyPtr method contentType body = sendBodyPath method contentType body . toPath
+sendBodyPtr :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> p -> BSL.ByteString -> m a
+sendBodyPtr method contentType = sendBodyPath method contentType . toPath
 
-sendBodyPtrSub :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> BSL.ByteString -> T.Text -> p -> m a
-sendBodyPtrSub method contentType body sub = sendBodyPtr method contentType body . pathSub sub
+sendBodyPtrSub :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> Sub -> p -> BSL.ByteString -> m a
+sendBodyPtrSub method contentType sub = sendBodyPtr method contentType . pathSub sub
+
+sendJsonPath ::(MChatlessClient m, ToJSON b, FromJSON a) => StdMethod -> Path -> b -> m a
+sendJsonPath method path = sendBodyPath method "application/json" path . encode
+
+sendJsonPtr :: (MChatlessClient m , ToJSON b, FromJSON a, PathPointer p) => StdMethod -> p -> b -> m a
+sendJsonPtr method = sendJsonPath method . toPath
+
+sendJsonPtrSub :: (MChatlessClient m , ToJSON b, FromJSON a, PathPointer p) => StdMethod -> Sub -> p -> b -> m a
+sendJsonPtrSub method sub = sendJsonPtr method . pathSub sub
 
 -- todo: handle "204 No Content" responses properly
-setTopicBanner :: MChatlessClient m => TL.Text -> TopicPtr -> m (Maybe [Msg.MessageRef])
-setTopicBanner banner = sendBodyPtrSub PUT "text/plain" (TL.encodeUtf8 banner) "banner"
+setTopicBanner :: MChatlessClient m => TopicPtr -> TL.Text -> m (Maybe [Msg.MessageRef])
+setTopicBanner ptr = sendBodyPtrSub PUT "text/plain" "banner" ptr . TL.encodeUtf8 
 
+sendMessage :: MChatlessClient m => TopicPtr -> Value -> m [Msg.MessageRef]
+sendMessage = sendJsonPtrSub POST "banner"
 

@@ -67,7 +67,7 @@ makeFakeUser :: T.Text -> T.Text -> User
 makeFakeUser sid uid = User (ServerId sid) (UserId uid) (TopicId "about") (TopicId "invite")
 
 runChatlessMigrate :: (ConnectionManager cm conn, MonadBaseControl IO m, MonadIO m, PersistBackend (DbPersist conn (NoLoggingT m))) => cm -> m ()
-runChatlessMigrate = runDbConn $ runMigration defaultMigrationLogger $ do
+runChatlessMigrate = runDbConn . runMigration $ do
     migrate (undefined :: User)
     migrate (undefined :: Topic)
     migrate (undefined :: Member)

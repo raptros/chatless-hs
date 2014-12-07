@@ -77,7 +77,8 @@ data TopicOpFailureReason  =
     TargetNotMember (Ur.UserRef) |
     NotPermitted |
     MsgIdInUse MessageId |
-    MsgIdGenFailed [MessageId]
+    MsgIdGenFailed [MessageId] |
+    TargetAlreadyMember (Ur.UserRef)
     deriving (Eq, Show)
 
 -- | convert the failure with the topic ref into an error report
@@ -87,6 +88,7 @@ tofrPrepare (TargetNotMember uref) = ("not member", ["user" .= uref])
 tofrPrepare NotPermitted           = ("not permitted", [])
 tofrPrepare (MsgIdInUse mid)       = ("message id in use", ["mid" .= mid])
 tofrPrepare (MsgIdGenFailed mids)  = ("message id generation failed", ["tried" .= mids])
+tofrPrepare (TargetAlreadyMember uref) = ("already member", ["user" .= uref])
 
 -- | status codes appropriate for each failure type
 topicOpFailureStatus :: TopicOpFailureReason-> Status
@@ -95,6 +97,7 @@ topicOpFailureStatus (TargetNotMember _) = notFound404
 topicOpFailureStatus NotPermitted        = forbidden403
 topicOpFailureStatus (MsgIdInUse _)      = badRequest400
 topicOpFailureStatus (MsgIdGenFailed _)  = internalServerError500
+topicOpFailureStatus (TargetAlreadyMember _) = badRequest400
 
 -- | wrapper around a failure type and a topic ref; it can be thrown and it
 -- can be reported as a response body
@@ -132,10 +135,8 @@ respondTopicOpResult :: MonadRespond m => TopicOpResult -> m ResponseReceived
 respondTopicOpResult = either respondTopicOpFailed respondMessagesCreated
 
 -- * the operations
-type TopicOperationT m a = WriterT [Msg.MessageRef] (Gh.DbPersist CLDb (NoLoggingT m)) a
-
-tryTopicOp :: (MonadChatless m, MonadCatch m) => TopicOperationT m () -> m TopicOpResult
-tryTopicOp = try . runTransaction . execWriterT
+sendMessage :: (MonadChatless m, MonadCatch m) => Ur.User -> Tp.Topic -> StorableJson -> m TopicOpResult
+sendMessage caller topic body = tryTopicOp $ operateTopicSimple caller topic SendMessage Msg.MsgPosted (Just body) (const $ return ())
 
 changeBanner :: (MonadChatless m, MonadCatch m) => Ur.User -> Tp.Topic -> T.Text -> m TopicOpResult
 changeBanner caller topic newBanner = tryTopicOp $ operateTopicIfChanged caller topic SetBanner Msg.MsgBannerChanged (Tp.topicBanner topic) newBanner go
@@ -160,31 +161,73 @@ changeMemberMode targetUserRef caller topic mmu = tryTopicOp $ operateTopic call
     changed = flip Tm.resolveMemberModeUpdateMay mmu <$> opGetTargetMemberMode TargetNotMember SetMemberMode topic targetUserRef
     go newMemberMode = Gh.update [Tm.MemberModeField Gh.=. newMemberMode] $ Tm.TargetMember Gh.==. Tm.TargetMemberKey (Tp.getRefFromTopic topic) targetUserRef
 
-sendMessage :: (MonadChatless m, MonadCatch m) => Ur.User -> Tp.Topic -> StorableJson -> m TopicOpResult
-sendMessage caller topic body = tryTopicOp $ operateTopicSimple caller topic SendMessage Msg.MsgPosted (Just body) (const $ return ())
+sendInvite :: (MonadChatless m, MonadCatch m) => Ur.UserRef -> Ur.User -> Tp.Topic -> StorableJson -> m TopicOpResult
+sendInvite targetUserRef caller topic _ = tryTopicOp $ do
+    lift $ topicOpPermitGuard SendInvite caller topic
+    let tr = Tp.getRefFromTopic topic
+        alreadyMember = TopicOpFailed SendInvite (TargetAlreadyMember targetUserRef) tr
+    lift $ Gh.getBy (Tm.TargetMemberKey tr targetUserRef) >>= maybe (return ()) (const $ throwM alreadyMember)
 
 -- ** tools for defining topic operations
 
-operateTopicIfChanged :: (Eq v, Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) => Ur.User -> Tp.Topic -> TopicOp -> (v -> Msg.MsgContent) -> v -> v -> m () -> WriterT [Msg.MessageRef] m ()
-operateTopicIfChanged caller topic op mkMessage old new inner = operateTopicSimple caller topic op mkMessage (passNewIfChanged old new) (const inner)
+-- | topic operations need to record all the messages they will insert
+type TopicOperationT m a = WriterT [Msg.MessageRef] (Gh.DbPersist CLDb (NoLoggingT m)) a
+
+-- | runs the topic operaton and catches any TopicOpFailed exceptions
+tryTopicOp :: (MonadChatless m, MonadCatch m) => TopicOperationT m () -> m TopicOpResult
+tryTopicOp = try . runTransaction . execWriterT
+
+-- | topic operations seem to have a basic structure - determine if there
+-- is an actual change, if there is, perform it and then send a message
+-- describing the change
+operateTopic :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) 
+             => Ur.User -- ^ caller
+             -> Tp.Topic -- ^ topic to operate in (lol)
+             -> TopicOp -- ^ the operation that is being performed
+             -> (v -> Msg.MsgContent) -- ^ what message to send for the change
+             -> m (Maybe v) -- ^ if the value is being changed, should produce the new one
+             -> (v -> m ()) -- ^ action to write the new value
+             -> WriterT [Msg.MessageRef] m () -- ^ can be run by 'tryTopicOp'
+operateTopic caller topic op mkMessageBody changeCheck performUpdate = do
+    lift $ topicOpPermitGuard op caller topic 
+    mNewVal <- lift changeCheck
+    -- forM_ over the Maybe runs the inner action only if there is
+    -- Just a value
+    Fld.forM_ mNewVal $ \newVal -> do
+        lift $ performUpdate newVal
+        opWriteMessage op caller topic $ mkMessageBody newVal
+
+-- | simplifies 'operateTopic' by taking Maybe a new value directly,
+-- instead of in a monadic action
+operateTopicSimple :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) 
+                   => Ur.User 
+                   -> Tp.Topic 
+                   -> TopicOp 
+                   -> (v -> Msg.MsgContent) 
+                   -> Maybe v  -- ^ simplified value change test
+                   -> (v -> m ()) 
+                   -> WriterT [Msg.MessageRef] m ()
+operateTopicSimple caller topic op mkMsg = operateTopic caller topic op mkMsg . return 
+
+-- | simplifies 'operateTopic' by taking an old value and a new value and
+-- running the action etc only if the two values are not equal.
+operateTopicIfChanged :: (Eq v, Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) 
+                      => Ur.User 
+                      -> Tp.Topic 
+                      -> TopicOp 
+                      -> (v -> Msg.MsgContent) -- ^ message to send only after action is performed
+                      -> v -- ^ old value
+                      -> v -- ^ new value
+                      -> m () -- ^ action to perform
+                      -> WriterT [Msg.MessageRef] m ()
+operateTopicIfChanged caller topic op mkMessage old new = operateTopicSimple caller topic op mkMessage (passNewIfChanged old new) . const
+
+-- ** topic utilities
 
 -- | old, new, produce the new only if not the old
 passNewIfChanged :: Eq a => a -> a -> Maybe a
 passNewIfChanged old new = bool Nothing (Just new) (old /= new)
                    
-operateTopicSimple :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) => Ur.User -> Tp.Topic -> TopicOp -> (v -> Msg.MsgContent) -> (Maybe v) -> (v -> m ()) -> WriterT [Msg.MessageRef] m ()
-operateTopicSimple caller topic op mkMsg check perform = operateTopic caller topic op mkMsg (return check) perform
-
-operateTopic :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) => Ur.User -> Tp.Topic -> TopicOp -> (v -> Msg.MsgContent) -> m (Maybe v) -> (v -> m ()) -> WriterT [Msg.MessageRef] m ()
-operateTopic caller topic op mkMessageBody changeCheck performUpdate = do
-    lift $ topicOpPermitGuard op caller topic 
-    mNewVal <- lift changeCheck
-    Fld.forM_ mNewVal $ \newVal -> do
-        lift $ performUpdate newVal
-        opWriteMessage op caller topic $ mkMessageBody newVal
-
--- ** topic utilities
-
 -- | throws an exception when the Maybe is Nothing
 throwOrReturn :: (MonadThrow m, Exception e) => e -> Maybe a -> m a
 throwOrReturn = flip maybe return . throwM
@@ -213,7 +256,9 @@ opGetTargetMemberMode fReason op topic targetRef = Gh.getBy (Tm.TargetMemberKey 
     where
     tr = Tp.getRefFromTopic topic
 
-
+-- | retrys the action up to n times.
+retryNTimes :: (Alternative f) => Int -> f a -> f a
+retryNTimes n act = Fld.asum $ replicate n act
 
 -- ** writing messages
 
@@ -222,11 +267,16 @@ opWriteMessage op sender topic content = do
     msg <- lift $ opAttemptMsgCreate op sender topic content
     tell [Msg.getRefFromMessage msg]
 
+-- | how many times 'opAttemptMsgCreate' should attempt to generate an id
+-- and save the message
+msgCreateMaxAttempts :: Int
+msgCreateMaxAttempts = 3
+
 opAttemptMsgCreate :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) => TopicOp -> Ur.User -> Tp.Topic -> Msg.MsgContent -> m Msg.Message
 opAttemptMsgCreate op sender topic content = runAttempts >>= throwOrReturn <$> onFail . snd <*> fst
     where
     onFail tried = TopicOpFailed op (MsgIdGenFailed tried) (Tp.getRefFromTopic topic)
-    runAttempts = runWriterT . runMaybeT $ attempt <|> attempt <|> attempt
+    runAttempts = runWriterT . runMaybeT $ retryNTimes msgCreateMaxAttempts attempt
     attempt = do
         mid <- genRandom
         tell [mid]

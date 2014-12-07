@@ -1,50 +1,48 @@
 {-|
 
-this exists so i can store json objects and arrays as primitives 
+'StorableJson' is a newtype wrapper around Json values that has instances for persisting it in a database.
 -}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
  
-module Chatless.Model.StorableJson (StorableJson, storableObject, storableEmpty) where 
+module Chatless.Model.StorableJson where 
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as LB
 import Control.Applicative (pure)
-import Database.Groundhog()
-import Database.Groundhog.Core (PersistField, PrimitivePersistField, NeverNull, persistName, toPersistValues, fromPersistValues, dbType, DbType(..), DbTypePrimitive'(..), toPrimitivePersistValue, fromPrimitivePersistValue)
-import Database.Groundhog.Generic (primToPersistValue, primFromPersistValue)
-import Data.Aeson (ToJSON, toJSON, FromJSON, parseJSON, Value(..), Object, object, decodeStrict', encode, )
-import Data.Aeson.Types (typeMismatch, Parser)
-import Data.Maybe (fromMaybe)
+import Database.Groundhog ()
+import qualified Database.Groundhog.Core as Gh
+import qualified Database.Groundhog.Generic as Gh
+import qualified Data.Aeson as A
+import qualified Data.Aeson.Types as A
 
-newtype StorableJson = StorableJson B.ByteString deriving (Show, Eq)
+newtype StorableJson = StorableJson { 
+    storableJsonValue :: A.Value 
+} deriving (Show, Eq)
 
-instance ToJSON StorableJson where
-    toJSON (StorableJson s) = fromMaybe (object []) v
-      where v = decodeStrict' s :: Maybe Value
+instance A.ToJSON StorableJson where
+    toJSON = storableJsonValue
 
-parseToStorable :: Value -> Parser StorableJson
-parseToStorable = pure . StorableJson . LB.toStrict . encode
-    
-instance FromJSON StorableJson where
-    parseJSON v @ (Object _) = parseToStorable v
-    parseJSON v @ (Array _) = parseToStorable v
-    parseJSON v = typeMismatch "StorableJson" v
+instance A.FromJSON StorableJson where
+    parseJSON = pure . StorableJson
 
-instance PersistField StorableJson where
+instance Gh.PersistField StorableJson where
     persistName _ = "StorableJson"
-    toPersistValues = primToPersistValue
-    fromPersistValues = primFromPersistValue
-    dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
+    toPersistValues = Gh.primToPersistValue
+    fromPersistValues = Gh.primFromPersistValue
+    dbType _ _ = Gh.DbTypePrimitive Gh.DbString False Nothing Nothing
 
-instance PrimitivePersistField StorableJson where
-    toPrimitivePersistValue p (StorableJson bs) = toPrimitivePersistValue p bs
-    fromPrimitivePersistValue p x = StorableJson $ fromPrimitivePersistValue p x
+instance Gh.SinglePersistField StorableJson where
+    toSinglePersistValue = Gh.primToSinglePersistValue
+    fromSinglePersistValue = Gh.primFromSinglePersistValue
 
-instance NeverNull StorableJson
+instance Gh.PurePersistField StorableJson where
+    toPurePersistValues = Gh.primToPurePersistValues
+    fromPurePersistValues = Gh.primFromPurePersistValues
 
-storableObject :: Object -> StorableJson
-storableObject = StorableJson . LB.toStrict . encode . Object
+instance Gh.PrimitivePersistField StorableJson where
+    toPrimitivePersistValue p = Gh.toPrimitivePersistValue p . A.encode . storableJsonValue
+    fromPrimitivePersistValue p = maybe storableEmpty StorableJson . A.decode . Gh.fromPrimitivePersistValue p
+
+instance Gh.NeverNull StorableJson
 
 storableEmpty :: StorableJson
-storableEmpty = StorableJson $ LB.toStrict $ encode $ object []
+storableEmpty = StorableJson A.emptyObject

@@ -3,134 +3,150 @@
 module Api.Routes where
 
 import Control.Applicative ((<$>), (<|>))
-import Chatless.Model.ID
-import Chatless.Model.User
-import Chatless.Model.Topic
 import Network.Wai
 import Data.Monoid ((<>))
 import Control.Monad ((>=>))
 import Data.Aeson
 import Network.HTTP.Types.Status
 import Control.Lens ((<&>))
+import Control.Monad.Trans.Cont (cont, evalCont)
+import Data.Bool (bool)
+
 import Web.Respond
-import Web.Respond.HListUtils
+
+import Chatless.Model.ID
+import qualified Chatless.Model.User as Ur
+import qualified Chatless.Model.Topic as Tp
+
 import Api.Config
 import Api.Monad
-import Api.Queries
 import Api.Auth
-import Api.Ops
-import Control.Monad.Trans.Cont
+
+import qualified Api.Queries as Q
+import qualified Api.Ops as Ops
 
 type CLApi = RespondT Chatless
+type RR = ResponseReceived
 
 apiApplication :: CLConfig -> Application
 apiApplication conf = respondAppDefault (`runChatless` conf) api 
 
-api :: CLApi ResponseReceived
+api :: CLApi RR
 api = matchPath $
     pathEndOrSlash apiRoot <|> 
     path (seg "me") meRoutes <|>
     path localUserExtractor (getLocalUserRef >=> localUserRoutes) <|>
     path anyUserExtractor anyUserRoutes
 
-apiRoot :: CLApi ResponseReceived
+apiRoot :: CLApi RR
 apiRoot = matchMethod $ onGET $ do
     sid <- getServerId 
     respondOk (object ["server" .= sid])
 
-meRoutes :: CLApi ResponseReceived
+meRoutes :: CLApi RR
 meRoutes = authenticate callerAuth $ \callerData -> matchPath $
     path endOrSlash (respondOk $ Json callerData) <|>
     path (seg "sub") (handleSubs callerData) <|>
-    path (seg "about") (callerTopic callerData userAboutTopicRef) <|>
-    path (seg "invite") (callerTopic callerData userInviteTopicRef) <|>
+    path (seg "about") (callerTopic callerData Tp.userAboutTopicRef) <|>
+    path (seg "invite") (callerTopic callerData Tp.userInviteTopicRef) <|>
     path (seg "topic" </> endOrSlash) (matchMethod $
-         onGET (getUserTopics callerData >>= respondOk . Json) <>
+         onGET (Q.getUserTopics callerData >>= respondOk . Json) <>
          onPOST rNotImplemented) <|>
-    path topicIdSeg (callerTopic callerData . topicRefFromUser)
+    path topicIdSeg (callerTopic callerData . Tp.topicRefFromUser)
 
-handleSubs :: User -> CLApi ResponseReceived
+handleSubs :: Ur.User -> CLApi RR
 handleSubs _ = rNotImplemented
 
-localUserRoutes :: UserRef -> CLApi ResponseReceived
-localUserRoutes = withUser $ \userData -> matchPath $
-    path endOrSlash (respondOk $ Json userData) <|>
-    path (seg "about") (otherUserTopic userData userAboutTopicRef) <|>
-    path (seg "invite") (otherUserTopic userData userInviteTopicRef) <|>
-    path (seg "topic" </> endOrSlash) (matchGET $ 
-         getUserTopics userData >>= respondOk . Json) <|>
-    path topicIdSeg (otherUserTopic userData . topicRefFromUser)
+localUserRoutes :: Ur.UserRef -> CLApi RR
+localUserRoutes = Q.withUser $ \userData -> matchPath $
+    pathEndOrSlash (respondOk $ Json userData) <|>
+    path (seg "about") (otherUserTopic userData Tp.userAboutTopicRef) <|>
+    path (seg "invite") (otherUserTopic userData Tp.userInviteTopicRef) <|>
+    pathLastSeg "topic" (matchGET $ 
+         Q.getUserTopics userData >>= respondOk . Json) <|>
+    path topicIdSeg (otherUserTopic userData . Tp.topicRefFromUser)
 
-anyUserRoutes :: UserRef -> CLApi ResponseReceived
-anyUserRoutes user =  getServerId >>= \sid -> if sid == userRefServer user then localUserRoutes user else rNotImplemented
+anyUserRoutes :: Ur.UserRef -> CLApi RR
+anyUserRoutes user = getUserRefIsLocal user >>= bool rNotImplemented (localUserRoutes user)
 
-callerTopic :: User -> (User -> TopicRef) -> CLApi ResponseReceived
+getUserRefIsLocal :: MonadChatless m => Ur.UserRef -> m Bool
+getUserRefIsLocal uref = (Ur.userRefServer uref ==) <$> getServerId
+
+callerTopic :: Ur.User -> (Ur.User -> Tp.TopicRef) -> CLApi RR
 callerTopic user f = topicRoutes (Just user) (f user)
 
-otherUserTopic :: User -> (User -> TopicRef) -> CLApi ResponseReceived
+otherUserTopic :: Ur.User -> (Ur.User -> Tp.TopicRef) -> CLApi RR
 otherUserTopic user f = topicRoutes Nothing (f user)
 
-topicRoutes :: Maybe User -> TopicRef -> CLApi ResponseReceived
-topicRoutes = withTopic . topicRoutesInner
+topicRoutes :: Maybe Ur.User -> Tp.TopicRef -> CLApi RR
+topicRoutes = Q.withTopic . topicRoutesInner
 
-topicRoutesInner :: Maybe User -> Topic -> CLApi ResponseReceived
+topicRoutesInner :: Maybe Ur.User -> Tp.Topic -> CLApi RR
 topicRoutesInner maybeCaller topicData = matchPath $
-    pathEndOrSlash (matchGET $ getTopicForCall maybeCaller topicData) <|>
+    pathEndOrSlash (matchGET $ Q.getTopicForCall maybeCaller topicData) <|>
     pathLastSeg "banner" (matchMethod $
-        onGET (getField topicBanner) <>
-        onPUT (performOp getTextBodyS changeBanner)) <|>
+        onGET (getField Tp.topicBanner) <>
+        onPUT (performOp getTextBodyS Ops.changeBanner)) <|>
     pathLastSeg "info" (matchMethod $
-        onGET (getField topicInfo) <>
-        onPUT (performOp getJson changeInfo)) <|>
+        onGET (getField Tp.topicInfo) <>
+        onPUT (performOp getJson Ops.changeInfo)) <|>
     pathLastSeg "mode" (matchMethod $ 
-        onGET (getField topicMode) <>
-        onPUT (performOp getJson changeTopicMode)) <|>
+        onGET (getField Tp.topicMode) <>
+        onPUT (performOp getJson Ops.changeTopicMode)) <|>
     path (seg "member") (matchPath $
-        pathEndOrSlash (matchGET $ listTopicMembersForCall maybeCaller topicData) <|>
+        pathEndOrSlash (matchGET $ Q.listTopicMembersForCall maybeCaller topicData) <|>
         path (localUserExtractor </> endOrSlash) (getLocalUserRef >=> memberRoute) <|>
         path (anyUserExtractor </> endOrSlash) memberRoute) <|>
     path (seg "message") (matchPath $
         pathEndOrSlash (matchMethod $
-            onGET (messagesLast maybeCaller topicData $ Just $ Natural $ 1) <>
-            onPOST (performOp getJson sendMessage)) <|>
-        pathGET (seg "first" </> optCountEndSeg) (messagesFirst maybeCaller topicData) <|>
-        pathGET (seg "last" </> optCountEndSeg) (messagesLast maybeCaller topicData) <|>
-        pathGET (seg "before" </> midSeg </> optCountEndSeg) (messagesBefore maybeCaller topicData) <|>
-        pathGET (seg "after" </> midSeg </> optCountEndSeg) (messagesAfter maybeCaller topicData) <|>
-        pathGET (seg "at" </> midSeg </> optCountEndSeg) (messagesAt maybeCaller topicData) <|>
-        pathGET (seg "from" </> midSeg </> optCountEndSeg) (messagesFrom maybeCaller topicData))
+            onGET (mLast $ Just $ Natural 1) <>
+            onPOST (performOp getJson Ops.sendMessage)) <|>
+        pathGET (seg "just"   </> midSeg </> endOrSlash) mJust <|>
+        pathGET (seg "first"  </> optCountEndSeg) mFirst <|>
+        pathGET (seg "last"   </> optCountEndSeg) mLast <|>
+        pathGET (seg "before" </> midSeg </> optCountEndSeg) mBefore <|>
+        pathGET (seg "after"  </> midSeg </> optCountEndSeg) mAfter <|>
+        pathGET (seg "at"     </> midSeg </> optCountEndSeg) mAt <|>
+        pathGET (seg "from"   </> midSeg </> optCountEndSeg) mFrom)
     where
-    performOp :: (FromBody e b) => (b -> v) -> (User -> Topic -> v -> CLApi TopicOpResult) -> CLApi ResponseReceived
+    mJust   = Q.justMessage    maybeCaller topicData
+    mFirst  = Q.messagesFirst  maybeCaller topicData
+    mLast   = Q.messagesLast   maybeCaller topicData
+    mBefore = Q.messagesBefore maybeCaller topicData
+    mAfter  = Q.messagesAfter  maybeCaller topicData
+    mAt     = Q.messagesAt     maybeCaller topicData
+    mFrom   = Q.messagesFrom   maybeCaller topicData
+    performOp :: (FromBody e b) => (b -> v) -> (Ur.User -> Tp.Topic -> v -> CLApi Ops.TopicOpResult) -> CLApi RR
     performOp = hPerformOperation maybeCaller topicData
-    getField :: ToJSON a => (Topic -> a) -> CLApi ResponseReceived
-    getField = getTopicFieldForCall maybeCaller topicData
+    getField :: ToJSON a => (Tp.Topic -> a) -> CLApi RR
+    getField = Q.getTopicFieldForCall maybeCaller topicData
     -- queries and ops for a particular member of the topic
-    memberRoute :: UserRef -> CLApi ResponseReceived
+    memberRoute :: Ur.UserRef -> CLApi RR
     memberRoute ur = matchMethod $
-        onGET (getTopicMemberForCall maybeCaller topicData ur) <>
-        onPUT (performOp getJson $ changeMemberMode ur) <>
-        onPOST rNotImplemented
+        onGET  (Q.getTopicMemberForCall maybeCaller topicData ur) <>
+        onPUT  (performOp getJson $ Ops.changeMemberMode ur) <>
+        onPOST (performOp getJson $ Ops.sendInvite ur)
 
-hPerformOperation :: (FromBody e b) => Maybe User -> Topic -> (b -> v) -> (User -> Topic -> v -> CLApi TopicOpResult) -> CLApi ResponseReceived
+hPerformOperation :: (FromBody e b) => Maybe Ur.User -> Tp.Topic -> (b -> v) -> (Ur.User -> Tp.Topic -> v -> CLApi Ops.TopicOpResult) -> CLApi RR
 hPerformOperation maybeCaller topicData fGetBody c = evalCont $ do
     caller <- cont $ callerReauth maybeCaller
     body <- fGetBody <$> cont withRequiredBody
-    return $ c caller topicData body >>= respondTopicOpResult
+    return $ c caller topicData body >>= Ops.respondTopicOpResult
 
 midSeg :: PathExtractor1 MessageId
 midSeg = value
 
-rNotImplemented :: MonadRespond m => m ResponseReceived
+rNotImplemented :: MonadRespond m => m RR
 rNotImplemented = respondEmptyBody notImplemented501 []
 
-localUserExtractor :: PathExtractor1 (ServerId -> UserRef)
-localUserExtractor = (seg "user" </> value) <&> hListMapTo1 (flip UserCoordKey)
+localUserExtractor :: PathExtractor1 (ServerId -> Ur.UserRef)
+localUserExtractor = (seg "user" </> value) <&> hListMapTo1 (flip Ur.UserCoordKey)
 
-getLocalUserRef :: MonadChatless m => (ServerId -> UserRef) -> m UserRef
+getLocalUserRef :: MonadChatless m => (ServerId -> Ur.UserRef) -> m Ur.UserRef
 getLocalUserRef = (<$> getServerId)
 
-anyUserExtractor :: PathExtractor1 UserRef
-anyUserExtractor = (seg "server" </> value </> seg "user" </> value) <&> hListMapTo1 UserCoordKey
+anyUserExtractor :: PathExtractor1 Ur.UserRef
+anyUserExtractor = (seg "server" </> value </> seg "user" </> value) <&> hListMapTo1 Ur.UserCoordKey
 
 topicIdSeg :: PathExtractor1 TopicId
 topicIdSeg = seg "topic" </> value

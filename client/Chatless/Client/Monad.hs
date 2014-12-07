@@ -16,14 +16,14 @@ import Chatless.Client.Session
 import Chatless.Client.Response
 
 
-class (Functor m, MonadIO m, MonadError ApiError m) => MChatlessClient m where
+class (Functor m, MonadIO m, MonadError ResponseError m) => MChatlessClient m where
     getSession :: m Session
 
 newtype CLClientT m a = CLClientT {
-    unCLClientT :: ExceptT ApiError (ReaderT Session m) a
-} deriving (Functor, Applicative, Monad, MonadReader Session, MonadError ApiError)
+    unCLClientT :: ExceptT ResponseError (ReaderT Session m) a
+} deriving (Functor, Applicative, Monad, MonadReader Session, MonadError ResponseError)
 
-runCLClientT :: (Functor m, MonadIO m) => CLClientT m a -> Session -> m (Either ApiError a)
+runCLClientT :: (Functor m, MonadIO m) => CLClientT m a -> Session -> m (Either ResponseError a)
 runCLClientT = runReaderT . runExceptT . unCLClientT
 
 instance (Functor m, MonadIO m) => MChatlessClient (CLClientT m) where
