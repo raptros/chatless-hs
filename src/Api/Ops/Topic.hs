@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ConstraintKinds #-}
 module Api.Ops.Topic where
 
 --import Control.Monad.Except
@@ -18,6 +19,7 @@ import Control.Applicative
 import Control.Monad.Cont
 import Control.Monad.Writer
 import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.Reader (mapReaderT)
 import Control.Monad.Catch
 import Control.Monad.Logger (NoLoggingT)
 
@@ -49,7 +51,8 @@ data TopicOp =
     SetTopicMode |
     SetMemberMode |
     SendMessage |
-    SendInvite
+    SendInvite |
+    JoinTopic
     deriving (Eq, Show)
 
 -- | strings representing the operations
@@ -60,6 +63,7 @@ topicOpText SetTopicMode = "set topic mode"
 topicOpText SetMemberMode = "set member mode"
 topicOpText SendMessage = "send message"
 topicOpText SendInvite = "send invite"
+topicOpText JoinTopic = "join topic"
 
 -- | produce a predicate determining if a user is allowed to perform the
 -- specified operation
@@ -70,6 +74,7 @@ topicOpAllowed SetTopicMode = const Tm.mmSetMode
 topicOpAllowed SetMemberMode = const Tm.mmSetMember
 topicOpAllowed SendMessage = Tm.canSend
 topicOpAllowed SendInvite = const Tm.mmInvite
+topicOpAllowed JoinTopic = const (const True)
 
 -- | various ways a topic operation can fail
 data TopicOpFailureReason  = 
@@ -78,26 +83,33 @@ data TopicOpFailureReason  =
     NotPermitted |
     MsgIdInUse MessageId |
     MsgIdGenFailed [MessageId] |
-    TargetAlreadyMember (Ur.UserRef)
+    TargetAlreadyMember (Ur.UserRef) |
+    NoSuchUser (Ur.UserRef) |
+    InviteTopicMissing (Tp.TopicRef)
     deriving (Eq, Show)
 
 -- | convert the failure with the topic ref into an error report
 tofrPrepare :: TopicOpFailureReason -> (T.Text, [Pair])
-tofrPrepare CallerNotMember        = ("not member", [])
-tofrPrepare (TargetNotMember uref) = ("not member", ["user" .= uref])
-tofrPrepare NotPermitted           = ("not permitted", [])
-tofrPrepare (MsgIdInUse mid)       = ("message id in use", ["mid" .= mid])
-tofrPrepare (MsgIdGenFailed mids)  = ("message id generation failed", ["tried" .= mids])
+tofrPrepare CallerNotMember            = ("not member", [])
+tofrPrepare (TargetNotMember uref)     = ("not member", ["user" .= uref])
+tofrPrepare NotPermitted               = ("not permitted", [])
+tofrPrepare (MsgIdInUse mid)           = ("message id in use", ["mid" .= mid])
+tofrPrepare (MsgIdGenFailed mids)      = ("message id generation failed", ["tried" .= mids])
 tofrPrepare (TargetAlreadyMember uref) = ("already member", ["user" .= uref])
+tofrPrepare (NoSuchUser uref)          = ("no such user", ["user" .= uref])
+tofrPrepare (InviteTopicMissing tref)  = ("invite topic missing", ["targetRef" .= tref])
+
 
 -- | status codes appropriate for each failure type
 topicOpFailureStatus :: TopicOpFailureReason-> Status
-topicOpFailureStatus CallerNotMember     = forbidden403
-topicOpFailureStatus (TargetNotMember _) = notFound404
-topicOpFailureStatus NotPermitted        = forbidden403
-topicOpFailureStatus (MsgIdInUse _)      = badRequest400
-topicOpFailureStatus (MsgIdGenFailed _)  = internalServerError500
+topicOpFailureStatus CallerNotMember         = forbidden403
+topicOpFailureStatus (TargetNotMember _)     = notFound404
+topicOpFailureStatus NotPermitted            = forbidden403
+topicOpFailureStatus (MsgIdInUse _)          = badRequest400
+topicOpFailureStatus (MsgIdGenFailed _)      = internalServerError500
 topicOpFailureStatus (TargetAlreadyMember _) = badRequest400
+topicOpFailureStatus (NoSuchUser _)          = notFound404
+topicOpFailureStatus (InviteTopicMissing _)  = internalServerError500
 
 -- | wrapper around a failure type and a topic ref; it can be thrown and it
 -- can be reported as a response body
@@ -162,25 +174,41 @@ changeMemberMode targetUserRef caller topic mmu = tryTopicOp $ operateTopic call
     go newMemberMode = Gh.update [Tm.MemberModeField Gh.=. newMemberMode] $ Tm.TargetMember Gh.==. Tm.TargetMemberKey (Tp.getRefFromTopic topic) targetUserRef
 
 sendInvite :: (MonadChatless m, MonadCatch m) => Ur.UserRef -> Ur.User -> Tp.Topic -> StorableJson -> m TopicOpResult
-sendInvite targetUserRef caller topic _ = tryTopicOp $ do
+sendInvite targetUserRef caller topic inviteBody = tryTopicOp $ do
     lift $ topicOpPermitGuard SendInvite caller topic
+    -- get the target user 
     let tr = Tp.getRefFromTopic topic
-        alreadyMember = TopicOpFailed SendInvite (TargetAlreadyMember targetUserRef) tr
-    lift $ Gh.getBy (Tm.TargetMemberKey tr targetUserRef) >>= maybe (return ()) (const $ throwM alreadyMember)
+        opFailed failure = TopicOpFailed SendInvite failure tr
+    targetUser <- lift $ Gh.getBy targetUserRef >>= throwOrReturn (opFailed (NoSuchUser targetUserRef))
+    -- get the target user's invite topic
+    let inviteTopicRef = Tp.userInviteTopicRef targetUser
+    targetInviteTopic <- lift $ Gh.getBy inviteTopicRef >>= throwOrReturn (opFailed (InviteTopicMissing inviteTopicRef))
+    -- add the target user to this topic
+    let mkInvitedMessage = Msg.MsgInvitedUser targetUserRef inviteTopicRef
+    invitedMemberMode <- opAddMember SendInvite Tm.invitedMode mkInvitedMessage caller topic targetUserRef
+    -- perform a send message operation within the target's invite topic
+    topicOpEnsuredPermitGuard SendMessage caller targetInviteTopic
+    opWriteMessage SendMessage caller targetInviteTopic (Msg.MsgInvitation tr invitedMemberMode inviteBody)
+
+joinTopic :: (MonadChatless m, MonadCatch m) => Ur.User -> Tp.Topic -> m TopicOpResult
+joinTopic caller topic = tryTopicOp $ void $ opAddMember JoinTopic Tm.joinerMode Msg.MsgUserJoined caller topic (Ur.getRefFromUser caller)
+
 
 -- ** tools for defining topic operations
 
 -- | topic operations need to record all the messages they will insert
-type TopicOperationT m a = WriterT [Msg.MessageRef] (Gh.DbPersist CLDb (NoLoggingT m)) a
+type TopicOperationT m a = Gh.DbPersist CLDb (NoLoggingT (WriterT [Msg.MessageRef] m)) a
+
+type MonadMessages m = (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m, MonadWriter [Msg.MessageRef] m)
 
 -- | runs the topic operaton and catches any TopicOpFailed exceptions
 tryTopicOp :: (MonadChatless m, MonadCatch m) => TopicOperationT m () -> m TopicOpResult
-tryTopicOp = try . runTransaction . execWriterT
+tryTopicOp = try . execWriterT . runTransaction
 
 -- | topic operations seem to have a basic structure - determine if there
 -- is an actual change, if there is, perform it and then send a message
 -- describing the change
-operateTopic :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) 
+operateTopic :: MonadMessages m 
              => Ur.User -- ^ caller
              -> Tp.Topic -- ^ topic to operate in (lol)
              -> TopicOp -- ^ the operation that is being performed
@@ -199,19 +227,19 @@ operateTopic caller topic op mkMessageBody changeCheck performUpdate = do
 
 -- | simplifies 'operateTopic' by taking Maybe a new value directly,
 -- instead of in a monadic action
-operateTopicSimple :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) 
+operateTopicSimple :: MonadMessages m
                    => Ur.User 
                    -> Tp.Topic 
                    -> TopicOp 
                    -> (v -> Msg.MsgContent) 
                    -> Maybe v  -- ^ simplified value change test
                    -> (v -> m ()) 
-                   -> WriterT [Msg.MessageRef] m ()
+                   -> m ()
 operateTopicSimple caller topic op mkMsg = operateTopic caller topic op mkMsg . return 
 
 -- | simplifies 'operateTopic' by taking an old value and a new value and
 -- running the action etc only if the two values are not equal.
-operateTopicIfChanged :: (Eq v, Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) 
+operateTopicIfChanged :: (Eq v, MonadMessages m)
                       => Ur.User 
                       -> Tp.Topic 
                       -> TopicOp 
@@ -219,7 +247,7 @@ operateTopicIfChanged :: (Eq v, Functor m, MonadThrow m, MonadIO m, Gh.PersistBa
                       -> v -- ^ old value
                       -> v -- ^ new value
                       -> m () -- ^ action to perform
-                      -> WriterT [Msg.MessageRef] m ()
+                      -> m ()
 operateTopicIfChanged caller topic op mkMessage old new = operateTopicSimple caller topic op mkMessage (passNewIfChanged old new) . const
 
 -- ** topic utilities
@@ -252,17 +280,54 @@ topicOpPermitGuard op user topic = opGetEffectiveMode op topic user >>= \mmode -
 -- | gets the mode of a member of a topic, throwing a TopicOpFailed exception if the
 -- target is not a member
 opGetTargetMemberMode :: (MonadThrow m, Functor m, Gh.PersistBackend m) => (Ur.UserRef -> TopicOpFailureReason) -> TopicOp -> Tp.Topic -> Ur.UserRef -> m Tm.MemberMode
-opGetTargetMemberMode fReason op topic targetRef = Gh.getBy (Tm.TargetMemberKey tr targetRef) >>= fmap Tm.memberMode . throwOrReturn (TopicOpFailed op (fReason targetRef) tr)
+opGetTargetMemberMode fReason op topic targetRef = Gh.getBy (Tm.TargetMemberKey tr targetRef) >>= fmap Tm.memberMode . throwOrReturn err
     where
     tr = Tp.getRefFromTopic topic
+    err = TopicOpFailed op (fReason targetRef) tr
 
 -- | retrys the action up to n times.
 retryNTimes :: (Alternative f) => Int -> f a -> f a
 retryNTimes n act = Fld.asum $ replicate n act
 
+-- | attempt to add a 
+opAddMember :: MonadMessages m => TopicOp -> (Tp.TopicMode -> Tm.MemberMode) -> (Tm.MemberMode -> Msg.MsgContent) -> Ur.User -> Tp.Topic -> Ur.UserRef -> m Tm.MemberMode
+opAddMember op getMMode mkMsg caller topic targetRef = opInsertMember op getMMode mkMsg caller topic targetRef >>= either (const $ alreadyMember) return
+    where
+    alreadyMember = throwM $ TopicOpFailed op (TargetAlreadyMember targetRef) (Tp.getRefFromTopic topic)
+
+opInsertMember :: MonadMessages m => TopicOp -> (Tp.TopicMode -> Tm.MemberMode) -> (Tm.MemberMode -> Msg.MsgContent) -> Ur.User -> Tp.Topic -> Ur.UserRef -> m (Either Tm.MemberMode Tm.MemberMode)
+opInsertMember op getMMode mkMsg caller topic targetRef = lift (Gh.getBy targetMemberRef) >>= maybe inner (return . Left . Tm.memberMode)
+    where
+    tr = Tp.getRefFromTopic topic
+    targetMemberRef = Tm.TargetMemberKey tr targetRef
+    newMode = getMMode (Tp.topicMode topic)
+    inner = do
+        lift $ Gh.insert_ $ Tm.Member tr targetRef newMode 
+        opWriteMessage op caller topic $ mkMsg newMode
+        return $ Right newMode
+
+opEnsureMember :: MonadMessages m => TopicOp -> Ur.User -> Tp.Topic -> WriterT [Msg.MessageRef] m Tm.MemberMode
+opEnsureMember op caller topic = combine <$> go
+    where
+    combine = either id id
+    go = opInsertMember op Tm.joinerMode Msg.MsgUserJoined caller topic (Ur.getRefFromUser caller) 
+
+opGetEnsuredMode :: MonadMessages m => TopicOp -> Tp.Topic -> Ur.User -> m Tm.MemberMode
+opGetEnsuredMode op topic user
+    | Tp.isUserCreator user topic = return Tm.modeCreator
+    | otherwise = opEnsureMember op user topic
+
+topicOpEnsuredPermitGuard :: MonadMessages m => TopicOp -> Ur.User -> Tp.Topic -> m ()
+topicOpEnsuredPermitGuard op user topic = opGetEnsuredMode op topic user >>= \mmode -> unless (topicOpAllowed op tmode mmode) (throwM err)
+    where
+    tref = Tp.getRefFromTopic topic
+    tmode = Tp.topicMode topic
+    err = TopicOpFailed op NotPermitted tref
+
+
 -- ** writing messages
 
-opWriteMessage :: (Functor m, MonadThrow m, MonadIO m, Gh.PersistBackend m) => TopicOp -> Ur.User -> Tp.Topic -> Msg.MsgContent -> WriterT [Msg.MessageRef] m ()
+opWriteMessage :: MonadMessages m => TopicOp -> Ur.User -> Tp.Topic -> Msg.MsgContent -> m ()
 opWriteMessage op sender topic content = do
     msg <- lift $ opAttemptMsgCreate op sender topic content
     tell [Msg.getRefFromMessage msg]
@@ -291,6 +356,15 @@ opStoreMessage sender topic content mid = do
     topicRef = Tp.getRefFromTopic topic
     senderRef = Ur.getRefFromUser sender
 
+mapDbPersist :: (m a -> n b) -> Gh.DbPersist conn m a -> Gh.DbPersist conn n b
+mapDbPersist f m = Gh.DbPersist $ mapReaderT f $ Gh.unDbPersist m
+
 -- absolutely disgusting
 instance MonadThrow m => MonadThrow (Gh.DbPersist conn m) where
     throwM = lift . throwM
+
+instance MonadWriter w m => MonadWriter w (Gh.DbPersist conn m) where
+    writer = lift . writer
+    tell = lift . tell
+    listen = mapDbPersist listen
+    pass = mapDbPersist pass 
