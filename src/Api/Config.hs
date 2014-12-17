@@ -13,4 +13,6 @@ data CLConfig = CLConfig {
     _clcDb :: Pool CLDb
 }
 
+
+
 makeLenses ''CLConfig

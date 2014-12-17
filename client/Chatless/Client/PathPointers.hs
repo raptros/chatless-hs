@@ -160,3 +160,10 @@ queryAt = (. MQAt) . MessageQueryPtr
 
 queryFrom :: TopicPtr -> MessageId -> Int -> MessageQueryPtr
 queryFrom = (. MQFrom) . MessageQueryPtr
+
+-- *** referencing a specific message
+
+data JustMessagePtr = JustMessagePtr TopicPtr MessageId deriving (Eq, Show)
+
+instance PathPointer JustMessagePtr where
+    toPath (JustMessagePtr topicPtr mid) = pathSub topicMessagesSub topicPtr S.|> "just" S.|> toPathPiece mid

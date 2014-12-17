@@ -34,6 +34,7 @@ data MsgContent =
     MsgMemberModeChanged { mcMember :: UserRef, mcMemberMode :: MemberMode } |
     MsgInvitation { mcJoin :: TopicRef, mcMemberMode :: MemberMode, mcBody :: StorableJson } |
     MsgInvitedUser { mcMember :: UserRef, mcFromTopic :: TopicRef, mcMemberMode :: MemberMode }
+    deriving (Eq, Show)
 
 msgContentFields :: MsgContent -> [Pair]
 msgContentFields (MsgPosted body) = ["body" .= body]
@@ -125,7 +126,13 @@ data Message = Message {
     msgId :: MessageId,
     msgSender :: UserRef,
     msgData :: MsgContent
-}
+} deriving (Eq, Show)
+
+getRefFromMsgHandle :: MsgHandle -> MessageRef 
+getRefFromMsgHandle = MessageCoordKey <$> mhTopic <*> mhId
+
+getRefFromMessage :: Message -> MessageRef
+getRefFromMessage = MessageCoordKey <$> msgTopic <*> msgId
 
 messageObject :: Message -> Object
 messageObject m = topicRefObject (msgTopic m) <> messageObjectParts <> msgContentObject (msgData m)
