@@ -44,7 +44,7 @@ topicQueryGuard maybeCaller topicData inner
         caller <- cont reauth
         memberMode <- cont $ withMemberAuth topicData caller (QueryDenied NotMember)
         let canQuery = Tm.mmRead memberMode || Tp.isUserCreator caller topicData
-        return $ if canQuery then inner else handleDenied (QueryDenied ReadDenied)
+        return $ if canQuery then inner else handleAccessDenied (QueryDenied ReadDenied)
     | Tp.authRequired topicData = reauth (const inner)
     | otherwise = inner
     where

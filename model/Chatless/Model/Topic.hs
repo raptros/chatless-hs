@@ -28,7 +28,7 @@ import Control.Lens.Operators ((&), (.~))
 
 import Chatless.Model.Utils (mkLensName, dropAndLowerHead, (^.=?), runUpdateR, asMaybe)
 import Chatless.Model.ID (ServerId, UserId, TopicId)
-import Chatless.Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, User)
+import Chatless.Model.User (UserRef, Key(UserCoordKey), userRefServer, userRefUser, userServer, userId, userAbout, userInvite, User)
 import Chatless.Model.StorableJson (StorableJson, storableEmpty)
 
 -- * Topic data model!
@@ -103,6 +103,15 @@ data TopicCreate = TopicCreate {
 } deriving (Eq, Show)
 
 $(deriveJSON defaultOptions { fieldLabelModifier = dropAndLowerHead 6} ''TopicCreate)
+
+-- *** using lenses to build a topic create 
+
+defaultTopicCreate :: TopicCreate
+defaultTopicCreate = TopicCreate Nothing Nothing Nothing Nothing
+
+makeLensesWith (lensRules & lensField .~ mkLensName) ''TopicCreate
+
+--- *** use
 
 -- | create a topic.
 initializeTopic :: UserRef -> TopicId -> TopicCreate -> Topic
@@ -200,7 +209,7 @@ userAboutTopicRef :: User -> TopicRef
 userAboutTopicRef user = TopicCoordKey (userServer user) (userId user) (userAbout user)
 
 userInviteTopicRef :: User -> TopicRef
-userInviteTopicRef user = TopicCoordKey (userServer user) (userId user) (userAbout user)
+userInviteTopicRef user = TopicCoordKey (userServer user) (userId user) (userInvite user)
 
 getRefFromTopic :: Topic -> TopicRef
 getRefFromTopic = TopicCoordKey <$> topicServer <*> topicUser <*> topicId

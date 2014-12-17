@@ -51,8 +51,11 @@ meRoutes = authenticate callerAuth $ \callerData -> matchPath $
     path (seg "invite") (callerTopic callerData Tp.userInviteTopicRef) <|>
     path (seg "topic" </> endOrSlash) (matchMethod $
          onGET (Q.getUserTopics callerData >>= respondOk . Json) <>
-         onPOST rNotImplemented) <|>
+         onPOST (handleTopicCreate callerData)) <|>
     path topicIdSeg (callerTopic callerData . Tp.topicRefFromUser)
+
+handleTopicCreate :: Ur.User -> CLApi RR
+handleTopicCreate caller = withRequiredBody $ Ops.createTopic caller . getJsonS >=> Ops.respondTopicCreateResult
 
 handleSubs :: Ur.User -> CLApi RR
 handleSubs _ = rNotImplemented

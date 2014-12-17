@@ -1,10 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Chatless.Model.ID  where
 
-import Chatless.Model.IDGen
-
-import Data.Text (Text)
+import qualified Data.Text as T
 import qualified System.Random as R
+import qualified Data.UUID as UUID
 import Data.Aeson()
 import Data.Aeson.TH (deriveJSON, defaultOptions)
 import Web.PathPieces (PathPiece, toPathPiece, fromPathPiece)
@@ -13,7 +12,19 @@ import Database.Groundhog.Core (PersistField(..), PrimitivePersistField(..), DbT
 import Control.Lens ((%~), _1)
 import Database.Groundhog.Generic (primToPersistValue, primFromPersistValue)
 
-newtype ServerId = ServerId Text deriving (Eq, Show, Read)
+-- * stuff for generating randoms
+
+newtype UUIDText = UUIDText { unUUIDText :: T.Text } deriving (Eq, Show)
+
+instance R.Random UUIDText where
+    random = (_1 %~ UUIDText . T.pack . UUID.toString) . R.random
+    randomR _ = R.random
+
+-- * the id types 
+
+-- ** server id
+
+newtype ServerId = ServerId T.Text deriving (Eq, Show, Read)
 
 $(deriveJSON defaultOptions ''ServerId)
 
@@ -31,7 +42,9 @@ instance PrimitivePersistField ServerId where
     toPrimitivePersistValue p (ServerId sid) = toPrimitivePersistValue p sid
     fromPrimitivePersistValue p x = ServerId $ fromPrimitivePersistValue p x
 
-newtype UserId = UserId Text deriving (Eq, Show, Read)
+-- ** user id
+
+newtype UserId = UserId T.Text deriving (Eq, Show, Read)
 
 $(deriveJSON defaultOptions ''UserId)
 
@@ -49,7 +62,9 @@ instance PrimitivePersistField UserId where
     toPrimitivePersistValue p (UserId uid) = toPrimitivePersistValue p uid
     fromPrimitivePersistValue p x = UserId $ fromPrimitivePersistValue p x
 
-newtype TopicId = TopicId Text deriving (Eq, Show, Read)
+-- ** topic id
+
+newtype TopicId = TopicId T.Text deriving (Eq, Show, Read)
 
 $(deriveJSON defaultOptions ''TopicId)
 
@@ -71,7 +86,9 @@ instance R.Random TopicId where
     random = (_1 %~ TopicId . unUUIDText) . R.random
     randomR _ = R.random
 
-newtype MessageId = MessageId Text deriving (Eq, Show, Read)
+-- ** message id
+
+newtype MessageId = MessageId T.Text deriving (Eq, Show, Read)
 
 $(deriveJSON defaultOptions ''MessageId)
 
@@ -92,4 +109,3 @@ instance PrimitivePersistField MessageId where
 instance R.Random MessageId where
     random = (_1 %~ MessageId . unUUIDText) . R.random
     randomR _ = R.random
-

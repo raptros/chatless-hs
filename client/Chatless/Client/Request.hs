@@ -35,8 +35,8 @@ import Chatless.Client.PathPointers
 performRequest :: MChatlessClient m => (r -> Either ResponseError a) -> (Session -> m r) -> m a
 performRequest process call = getSession >>= call >>= (either throwError return . process)
 
-callApi :: (MChatlessClient m, FromJSON a) => Path -> StdMethod -> RequestHeaders -> C.RequestBody -> m a
-callApi path method headers body = performRequest processApiResponse $ \session -> liftIO (C.httpLbs (mkRequest path method headers body session) (sessionManager session))
+callApi :: (MChatlessClient m, ResponseInterpreter a) => Path -> StdMethod -> RequestHeaders -> C.RequestBody -> m a
+callApi path method headers body = performRequest interpretResponse $ \session -> liftIO (C.httpLbs (mkRequest path method headers body session) (sessionManager session))
 
 -- ** request construction
 
@@ -57,14 +57,17 @@ mkRequest path method headers body session = Def.def {
 
 -- ** all GET requests
 
-queryApi :: (MChatlessClient m, FromJSON a) => Path -> m a
+queryApi :: (MChatlessClient m, ResponseInterpreter a) => Path -> m a
 queryApi path =  callApi path GET [] (C.RequestBodyBS "")
 
+queryApiJson :: (MChatlessClient m, FromJSON a) => Path -> m a
+queryApiJson = fmap okJsonBody . queryApi
+
 queryPtr :: (MChatlessClient m, FromJSON a, PathPointer p) => p -> m a
-queryPtr = queryApi . toPath
+queryPtr = queryApiJson . toPath
 
 queryPtrSub :: (MChatlessClient m, FromJSON a, PathPointer p) => T.Text -> p -> m a
-queryPtrSub sub = queryApi . pathSub sub
+queryPtrSub sub = queryApiJson . pathSub sub
 
 getUser :: MChatlessClient m => UserPtr -> m Ur.User
 getUser = queryPtr
@@ -94,28 +97,35 @@ getJustMessage :: MChatlessClient m => JustMessagePtr -> m Msg.Message
 getJustMessage = queryPtr
 
 -- ** put and post requests
-sendBodyPath :: (MChatlessClient m, FromJSON a) => StdMethod -> BS.ByteString -> Path -> BSL.ByteString -> m a
+sendBodyPath :: (MChatlessClient m, ResponseInterpreter a) => StdMethod -> BS.ByteString -> Path -> BSL.ByteString -> m a
 sendBodyPath method contentType path body = callApi path method [(hContentType, contentType)] (C.RequestBodyLBS body)
 
-sendBodyPtr :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> p -> BSL.ByteString -> m a
+sendBodyPtr :: (MChatlessClient m, PathPointer p, ResponseInterpreter a) => StdMethod -> BS.ByteString -> p -> BSL.ByteString -> m a
 sendBodyPtr method contentType = sendBodyPath method contentType . toPath
 
-sendBodyPtrSub :: (MChatlessClient m, PathPointer p, FromJSON a) => StdMethod -> BS.ByteString -> Sub -> p -> BSL.ByteString -> m a
+sendBodyPtrSub :: (MChatlessClient m, PathPointer p, ResponseInterpreter a) => StdMethod -> BS.ByteString -> Sub -> p -> BSL.ByteString -> m a
 sendBodyPtrSub method contentType sub = sendBodyPtr method contentType . pathSub sub
 
-sendJsonPath ::(MChatlessClient m, ToJSON b, FromJSON a) => StdMethod -> Path -> b -> m a
+sendJsonPath ::(MChatlessClient m, ToJSON b, ResponseInterpreter a) => StdMethod -> Path -> b -> m a
 sendJsonPath method path = sendBodyPath method "application/json" path . encode
 
-sendJsonPtr :: (MChatlessClient m , ToJSON b, FromJSON a, PathPointer p) => StdMethod -> p -> b -> m a
+sendJsonPtr :: (MChatlessClient m , ToJSON b, ResponseInterpreter a, PathPointer p) => StdMethod -> p -> b -> m a
 sendJsonPtr method = sendJsonPath method . toPath
 
-sendJsonPtrSub :: (MChatlessClient m , ToJSON b, FromJSON a, PathPointer p) => StdMethod -> Sub -> p -> b -> m a
+sendJsonPtrSub :: (MChatlessClient m , ToJSON b, ResponseInterpreter a, PathPointer p) => StdMethod -> Sub -> p -> b -> m a
 sendJsonPtrSub method sub = sendJsonPtr method . pathSub sub
 
--- todo: handle "204 No Content" responses properly
-setTopicBanner :: MChatlessClient m => TopicPtr -> TL.Text -> m (Maybe [Msg.MessageRef])
+createTopic :: MChatlessClient m => Tp.TopicCreate -> m TopicCreateResult
+createTopic = sendJsonPtrSub POST "topic" MePtr 
+
+setTopicBanner :: MChatlessClient m => TopicPtr -> TL.Text -> m TopicOpResult
 setTopicBanner ptr = sendBodyPtrSub PUT "text/plain" "banner" ptr . TL.encodeUtf8 
 
-sendMessage :: MChatlessClient m => TopicPtr -> Value -> m [Msg.MessageRef]
-sendMessage = sendJsonPtrSub POST "banner"
+sendMessage :: MChatlessClient m => TopicPtr -> Value -> m TopicOpResult
+sendMessage = sendJsonPtrSub POST "message"
 
+setMemberMode :: MChatlessClient m => MemberPtr -> Tm.MemberModeUpdate -> m TopicOpResult
+setMemberMode = sendJsonPtr PUT
+
+sendInvite :: MChatlessClient m => MemberPtr -> Value -> m TopicOpResult
+sendInvite = sendJsonPtr POST

@@ -14,10 +14,8 @@ import qualified Chatless.Model.Topic as Tp
 import qualified Chatless.Model.Message as Msg
 import Data.Aeson
 import Web.Respond
-import qualified Database.Groundhog as Gh
 import qualified Data.Text as T
 import Control.Monad.Trans.Control (MonadBaseControl)
-import Control.Monad.Trans.Class
 import Control.Monad.Logger
 import Control.Monad.Except
 
@@ -69,9 +67,4 @@ natToInt (Natural integer) = fromInteger integer
 
 getCountDefault :: Maybe Natural -> Int
 getCountDefault = maybe 1 natToInt
-
--- absolutely disgusting
-instance MonadError QueryFailure m => MonadError QueryFailure (Gh.DbPersist conn m) where
-    throwError = lift . throwError
-    catchError act h = Gh.DbPersist $ catchError (Gh.unDbPersist act) (Gh.unDbPersist . h)
 

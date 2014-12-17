@@ -8,9 +8,11 @@
 {-# LANGUAGE TypeFamilies #-}
 module Api.Monad where
 
+import Data.Monoid (Monoid)
 import Control.Applicative (Applicative)
 import Chatless.Model.ID
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
+import qualified Control.Monad.Trans.Writer.Lazy as LWriter
 import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Reader.Class
 import Control.Monad.Base (MonadBase, liftBase, liftBaseDefault)
@@ -47,6 +49,10 @@ instance MonadChatless m => MonadChatless (NoLoggingT m) where
     getConn = lift getConn
 
 instance MonadChatless m => MonadChatless (LoggingT m) where
+    getServerId = lift getServerId
+    getConn = lift getConn
+
+instance (MonadChatless m, Monoid w) => MonadChatless (LWriter.WriterT w m) where
     getServerId = lift getServerId
     getConn = lift getConn
 
