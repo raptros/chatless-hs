@@ -7,6 +7,8 @@ internal ops for creating messages in a topic
 module Api.Ops.Topic.Message where
 
 import System.Random (randomIO)
+import qualified Data.Time.Clock as Clock
+
 import Control.Applicative
 import Control.Monad.Cont
 import Control.Monad.Writer
@@ -43,11 +45,12 @@ opAttemptMsgCreate op sender topic content = runAttempts msgCreateMaxAttempts >>
         tell [mid]
         MaybeT $ lift $ opStoreMessage sender topic content mid
 
-opStoreMessage :: Gh.PersistBackend m => Ur.User -> Tp.Topic -> Msg.MsgContent -> MessageId -> m (Maybe Msg.Message)
+opStoreMessage :: (MonadBase IO m, Gh.PersistBackend m) => Ur.User -> Tp.Topic -> Msg.MsgContent -> MessageId -> m (Maybe Msg.Message)
 opStoreMessage sender topic content mid = do
     contentId <- Gh.insert content
-    res <- Gh.insertByAll $ Msg.MsgHandle topicRef mid senderRef contentId
-    return $ whenRight (Msg.Message topicRef mid senderRef content) res
+    time <- liftBase Clock.getCurrentTime
+    res <- Gh.insertByAll $ Msg.MsgHandle topicRef mid senderRef time contentId
+    return $ whenRight (Msg.Message topicRef mid senderRef time content) res
     where
     topicRef = Tp.getRefFromTopic topic
     senderRef = Ur.getRefFromUser sender

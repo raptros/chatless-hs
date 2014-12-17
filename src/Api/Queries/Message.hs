@@ -72,10 +72,10 @@ respondReportEither errStatus toOkBody = either (respondReportError errStatus []
 -- ** tools for obtaining a message
 
 queryLoadHandle :: (MonadError QueryFailure m, Gh.PersistBackend m) => Msg.MsgHandle -> m Msg.Message
-queryLoadHandle (Msg.MsgHandle tr mid sender k) = Gh.get k >>= maybe failure success
+queryLoadHandle (Msg.MsgHandle tr mid sender time k) = Gh.get k >>= maybe failure success
     where
     failure = throwError (LoadMessageFailed (Msg.MessageCoordKey tr mid))
-    success = return . Msg.Message tr mid sender
+    success = return . Msg.Message tr mid sender time
 
 queryMessageHandle :: (MonadError QueryFailure m, Gh.PersistBackend m) => Msg.MessageRef -> m Msg.MsgHandle
 queryMessageHandle mr = Gh.getBy mr >>= getOrThrow (MessageNotFound mr)

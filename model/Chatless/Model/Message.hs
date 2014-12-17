@@ -14,6 +14,7 @@ import Data.Aeson (ToJSON, FromJSON, (.=), (.:), Object, Value(..), withObject, 
 import Data.Aeson.Types (Pair, Parser, typeMismatch)
 import Data.Monoid ((<>))
 import Control.Applicative ((<$>), (<*>), (<|>))
+import Data.Time.Clock (UTCTime)
 
 import Database.Groundhog (DefaultKey, PersistBackend, Unique, AutoKey, migrate, Key)
 import Database.Groundhog.Core (Migration)
@@ -87,6 +88,7 @@ data MsgHandle = MsgHandle {
     mhTopic :: TopicRef,
     mhId :: MessageId,
     mhCaller :: UserRef,
+    mhTimestamp :: UTCTime,
     mhContent :: DefaultKey MsgContent
 }
 
@@ -125,6 +127,7 @@ data Message = Message {
     msgTopic :: TopicRef,
     msgId :: MessageId,
     msgSender :: UserRef,
+    msgTimestamp :: UTCTime,
     msgData :: MsgContent
 } deriving (Eq, Show)
 
@@ -136,7 +139,7 @@ getRefFromMessage = MessageCoordKey <$> msgTopic <*> msgId
 
 messageObject :: Message -> Object
 messageObject m = topicRefObject (msgTopic m) <> messageObjectParts <> msgContentObject (msgData m)
-  where messageObjectParts = H.fromList ["id" .= msgId m, "sender" .= msgSender m]
+  where messageObjectParts = H.fromList ["id" .= msgId m, "sender" .= msgSender m, "timestamp" .= msgTimestamp m]
 
 instance ToJSON Message where
     toJSON = Object . messageObject 
@@ -147,8 +150,8 @@ instance FromJSON Message where
                 topicRefFromObject o <*> 
                 o .: "id" <*> 
                 o .: "sender" <*> 
+                o .: "timestamp" <*> -- format should be ok.
                 msgContentFromObject o
 
 handleFromMessage :: AutoKey MsgContent -> Message -> MsgHandle
-handleFromMessage k (Message tr mid sender _) = MsgHandle tr mid sender k
-
+handleFromMessage k (Message tr mid sender time _) = MsgHandle tr mid sender time k
