@@ -109,3 +109,23 @@ instance PrimitivePersistField MessageId where
 instance R.Random MessageId where
     random = (_1 %~ MessageId . unUUIDText) . R.random
     randomR _ = R.random
+
+-- * subscription id
+
+newtype SubscriptionId = SubscriptionId T.Text deriving (Eq, Show, Read)
+
+$(deriveJSON defaultOptions ''SubscriptionId)
+
+instance PathPiece SubscriptionId where
+    toPathPiece (SubscriptionId i) = i
+    fromPathMultiPiece = Just . SubscriptionId
+
+instance PersistField SubscriptionId where
+    persistName _ = "SubscriptionId"
+    toPersistValues = primToPersistValue
+    fromPersistValues = primFromPersistValue
+    dbType _ _ = DbTypePrimitive DbString False Nothing Nothing
+
+instance PrimitivePersistField SubscriptionId where
+    toPrimitivePersistValue p (SubscriptionId sid) = toPrimitivePersistValue p sid
+    fromPrimitivePersistValue p x = SubscriptionId $ fromPrimitivePersistValue p x
